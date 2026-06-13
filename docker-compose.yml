@@ -1,0 +1,10 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8787:8787"
+    environment:
+      - PORT=8787
+      - COINGECKO_API_BASE=https://api.coingecko.com/api/v3
+      - NIMIQ_RPC_URL=https://rpc-mainnet.nimiqscan.com
+      - ALLOWED_ORIGIN=*
