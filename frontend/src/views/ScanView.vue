@@ -277,7 +277,7 @@ onUnmounted(() => {
       </div>
 
       <div class="relative">
-        <video ref="videoRef" class="w-full rounded-xl bg-black aspect-video" muted playsinline></video>
+        <video ref="videoRef" class="w-full rounded-xl bg-black aspect-video object-cover" muted playsinline></video>
         <div
           v-if="stream && !detected"
           class="absolute inset-0 flex items-center justify-center pointer-events-none"

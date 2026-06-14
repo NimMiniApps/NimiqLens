@@ -1,11 +1,14 @@
-/** Width of the centered target box as a fraction of the video frame. */
+/** Width of the centered target box as a fraction of the visible preview. */
 export const TARGET_WIDTH_RATIO = 0.75
 
-/** Height of the centered target box as a fraction of the video frame. */
+/** Height of the centered target box as a fraction of the visible preview. */
 export const TARGET_HEIGHT_RATIO = 0.35
 
 /** Upscale factor applied before OCR preprocessing. */
 export const PREPROCESS_SCALE = 2
+
+/** Aspect ratio (width / height) the camera preview is displayed at, matching the `aspect-video` CSS class. */
+export const DISPLAY_ASPECT_RATIO = 16 / 9
 
 export interface CropRect {
   x: number
@@ -14,12 +17,39 @@ export interface CropRect {
   height: number
 }
 
+/**
+ * Returns the centered sub-rect of a camera frame that remains visible when the
+ * frame is displayed with `object-fit: cover` at the given aspect ratio — the rest
+ * is cropped off-screen by the browser and never seen by the user.
+ */
+export function getVisibleFrameRect(
+  sourceWidth: number,
+  sourceHeight: number,
+  displayAspectRatio = DISPLAY_ASPECT_RATIO,
+): CropRect {
+  const sourceAspectRatio = sourceWidth / sourceHeight
+
+  if (sourceAspectRatio > displayAspectRatio) {
+    const width = Math.round(sourceHeight * displayAspectRatio)
+    return { x: Math.round((sourceWidth - width) / 2), y: 0, width, height: sourceHeight }
+  }
+
+  const height = Math.round(sourceWidth / displayAspectRatio)
+  return { x: 0, y: Math.round((sourceHeight - height) / 2), width: sourceWidth, height }
+}
+
+/**
+ * Returns the centered crop rect for the on-screen target box, expressed in source
+ * frame coordinates. Computed relative to the visible (post-`object-fit: cover`)
+ * portion of the frame so it matches what the user actually sees and aims at.
+ */
 export function getTargetCropRect(sourceWidth: number, sourceHeight: number): CropRect {
-  const width = Math.round(sourceWidth * TARGET_WIDTH_RATIO)
-  const height = Math.round(sourceHeight * TARGET_HEIGHT_RATIO)
+  const visible = getVisibleFrameRect(sourceWidth, sourceHeight)
+  const width = Math.round(visible.width * TARGET_WIDTH_RATIO)
+  const height = Math.round(visible.height * TARGET_HEIGHT_RATIO)
   return {
-    x: Math.round((sourceWidth - width) / 2),
-    y: Math.round((sourceHeight - height) / 2),
+    x: visible.x + Math.round((visible.width - width) / 2),
+    y: visible.y + Math.round((visible.height - height) / 2),
     width,
     height,
   }
