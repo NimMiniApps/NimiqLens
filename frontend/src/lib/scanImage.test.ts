@@ -4,6 +4,8 @@ import {
   TARGET_WIDTH_RATIO,
   PREPROCESS_SCALE,
   DISPLAY_ASPECT_RATIO,
+  VARIANT_MODES,
+  computeOtsuThreshold,
   getTargetCropRect,
   getVisibleFrameRect,
   preprocessPixels,
@@ -72,7 +74,7 @@ describe('preprocessTargetRegion', () => {
     ctx?.fillRect(0, 0, source.width, source.height)
   })
 
-  it('returns 2x scaled processed variants', () => {
+  it('returns a 2x scaled canvas even when the test canvas backend is unavailable', () => {
     const variants = preprocessTargetRegion(source)
 
     expect(variants.length).toBeGreaterThan(0)
@@ -80,6 +82,16 @@ describe('preprocessTargetRegion', () => {
       expect(variant.width).toBe(source.width * PREPROCESS_SCALE)
       expect(variant.height).toBe(source.height * PREPROCESS_SCALE)
     }
+  })
+
+  it('defines grayscale, fixed-threshold, and adaptive inverted OCR variants', () => {
+    expect(VARIANT_MODES).toEqual([
+      { mode: 'grayscale' },
+      { mode: 'threshold', threshold: 128 },
+      { mode: 'threshold', threshold: 160 },
+      { mode: 'threshold', threshold: 'auto' },
+      { mode: 'threshold-invert', threshold: 'auto' },
+    ])
   })
 })
 
@@ -100,5 +112,33 @@ describe('preprocessPixels', () => {
       0, 0, 0, 255,
       255, 255, 255, 255,
     ])
+  })
+
+  it('can invert a threshold variant for light-on-dark labels', () => {
+    const pixels = new Uint8ClampedArray([
+      100, 100, 100, 255,
+      200, 200, 200, 255,
+    ])
+
+    expect([...preprocessPixels(pixels, 'threshold-invert', 128)]).toEqual([
+      255, 255, 255, 255,
+      0, 0, 0, 255,
+    ])
+  })
+})
+
+describe('computeOtsuThreshold', () => {
+  it('selects a threshold between dark and bright clusters', () => {
+    const pixels = new Uint8ClampedArray([
+      20, 20, 20, 255,
+      25, 25, 25, 255,
+      220, 220, 220, 255,
+      230, 230, 230, 255,
+    ])
+
+    const threshold = computeOtsuThreshold(pixels)
+
+    expect(threshold).toBeGreaterThanOrEqual(25)
+    expect(threshold).toBeLessThan(220)
   })
 })

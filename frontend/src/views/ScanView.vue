@@ -119,13 +119,22 @@ async function recognizePriceFromFrame(): Promise<DetectedPrice | null> {
   if (!videoRef.value || !canvasRef.value) return null
 
   const variants = captureAndPreprocessTarget(videoRef.value, canvasRef.value)
+  let bestMatch: { price: DetectedPrice; score: number } | null = null
+
   for (const variant of variants) {
-    const { text, words } = await recognizeText(variant)
-    if (maxDigitWordConfidence(words) < MIN_OCR_CONFIDENCE) continue
+    const { text, confidence, words } = await recognizeText(variant)
+    const digitConfidence = maxDigitWordConfidence(words)
+    if (digitConfidence < MIN_OCR_CONFIDENCE) continue
     const price = detectPrice(text, editCurrency.value)
-    if (price) return price
+    if (!price) continue
+
+    const score = digitConfidence * 1000 + confidence
+    if (!bestMatch || score > bestMatch.score) {
+      bestMatch = { price, score }
+    }
   }
-  return null
+
+  return bestMatch?.price ?? null
 }
 
 async function runScanCycle() {

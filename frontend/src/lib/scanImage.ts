@@ -17,6 +17,16 @@ export interface CropRect {
   height: number
 }
 
+export type PreprocessMode = 'grayscale' | 'threshold' | 'threshold-invert'
+
+export const VARIANT_MODES = [
+  { mode: 'grayscale' },
+  { mode: 'threshold', threshold: 128 },
+  { mode: 'threshold', threshold: 160 },
+  { mode: 'threshold', threshold: 'auto' },
+  { mode: 'threshold-invert', threshold: 'auto' },
+] as const
+
 /**
  * Returns the centered sub-rect of a camera frame that remains visible when the
  * frame is displayed with `object-fit: cover` at the given aspect ratio — the rest
@@ -61,13 +71,15 @@ function toGrayscale(r: number, g: number, b: number): number {
 
 export function preprocessPixels(
   source: Uint8ClampedArray,
-  mode: 'grayscale' | 'threshold',
+  mode: PreprocessMode,
   threshold = 128,
 ): Uint8ClampedArray {
   const output = new Uint8ClampedArray(source.length)
   for (let i = 0; i < source.length; i += 4) {
     const gray = toGrayscale(source[i], source[i + 1], source[i + 2])
-    const value = mode === 'threshold' ? (gray >= threshold ? 255 : 0) : gray
+    let value = gray
+    if (mode === 'threshold') value = gray >= threshold ? 255 : 0
+    if (mode === 'threshold-invert') value = gray >= threshold ? 0 : 255
     output[i] = value
     output[i + 1] = value
     output[i + 2] = value
@@ -76,11 +88,54 @@ export function preprocessPixels(
   return output
 }
 
+export function computeOtsuThreshold(source: Uint8ClampedArray): number {
+  const histogram = new Array<number>(256).fill(0)
+  let total = 0
+
+  for (let i = 0; i < source.length; i += 4) {
+    const gray = toGrayscale(source[i], source[i + 1], source[i + 2])
+    histogram[gray] += 1
+    total += 1
+  }
+
+  let sum = 0
+  for (let i = 0; i < histogram.length; i += 1) {
+    sum += i * histogram[i]
+  }
+
+  let sumBackground = 0
+  let weightBackground = 0
+  let maxVariance = -1
+  let bestThreshold = 128
+
+  for (let threshold = 0; threshold < histogram.length; threshold += 1) {
+    weightBackground += histogram[threshold]
+    if (weightBackground === 0) continue
+
+    const weightForeground = total - weightBackground
+    if (weightForeground === 0) break
+
+    sumBackground += threshold * histogram[threshold]
+
+    const meanBackground = sumBackground / weightBackground
+    const meanForeground = (sum - sumBackground) / weightForeground
+    const varianceBetween =
+      weightBackground * weightForeground * (meanBackground - meanForeground) ** 2
+
+    if (varianceBetween > maxVariance) {
+      maxVariance = varianceBetween
+      bestThreshold = threshold
+    }
+  }
+
+  return bestThreshold
+}
+
 function createVariantCanvas(
   source: ImageData,
   width: number,
   height: number,
-  mode: 'grayscale' | 'threshold',
+  mode: PreprocessMode,
   threshold?: number,
 ): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
@@ -113,11 +168,21 @@ export function preprocessTargetRegion(
   scaledCtx.drawImage(cropped, 0, 0, scaled.width, scaled.height)
 
   const imageData = scaledCtx.getImageData(0, 0, scaled.width, scaled.height)
-  return [
-    createVariantCanvas(imageData, scaled.width, scaled.height, 'grayscale'),
-    createVariantCanvas(imageData, scaled.width, scaled.height, 'threshold', 128),
-    createVariantCanvas(imageData, scaled.width, scaled.height, 'threshold', 160),
-  ]
+  const adaptiveThreshold = computeOtsuThreshold(imageData.data)
+
+  return VARIANT_MODES.map((variant) =>
+    createVariantCanvas(
+      imageData,
+      scaled.width,
+      scaled.height,
+      variant.mode,
+      'threshold' in variant
+        ? variant.threshold === 'auto'
+          ? adaptiveThreshold
+          : variant.threshold
+        : undefined,
+    ),
+  )
 }
 
 /**

@@ -209,6 +209,30 @@ describe('ScanView', () => {
     expect(wrapper.text()).toContain('Detected: 24.5 EUR')
   })
 
+  it('chooses the strongest valid OCR candidate across preprocessing variants', async () => {
+    mocks.captureAndPreprocessTarget.mockReturnValue([
+      document.createElement('canvas'),
+      document.createElement('canvas'),
+    ])
+    mocks.recognizeText
+      .mockResolvedValueOnce({
+        text: '€12.00',
+        confidence: 62,
+        words: [{ text: '12.00', confidence: 62 }],
+      })
+      .mockResolvedValueOnce({
+        text: '€12.99',
+        confidence: 95,
+        words: [{ text: '12.99', confidence: 95 }],
+      })
+    const wrapper = await mountWithCamera()
+
+    await wrapper.get('[data-testid="scan-now"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Detected: 12.99 EUR')
+  })
+
   it('pauses automatic scanning while the page is hidden', async () => {
     mocks.recognizeText.mockResolvedValue({ text: 'no price here', confidence: 80, words: [] })
     await mountWithCamera()
