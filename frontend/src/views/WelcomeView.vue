@@ -9,6 +9,7 @@ import IconQr from '../components/icons/IconQr.vue'
 import IconAlert from '../components/icons/IconAlert.vue'
 import IconLock from '../components/icons/IconLock.vue'
 import IconSpinner from '../components/icons/IconSpinner.vue'
+import IconRefresh from '../components/icons/IconRefresh.vue'
 
 const walletStore = useWalletStore()
 const ratesStore = useRatesStore()
@@ -32,10 +33,6 @@ const formattedBalance = computed(() => {
 
 async function refreshBalance() {
   await walletStore.loadBalance()
-}
-
-async function reconnectWallet() {
-  await walletStore.connect()
 }
 </script>
 
@@ -76,7 +73,20 @@ async function reconnectWallet() {
       class="overflow-hidden rounded-2xl border border-white/10 bg-nimiq-card"
     >
       <div class="bg-gradient-to-br from-nimiq-blue to-nimiq-green-light px-4 py-5 text-white">
-        <p class="text-xs font-semibold uppercase tracking-[0.2em] opacity-80">Wallet balance</p>
+        <div class="flex items-center justify-between gap-2">
+          <p class="text-xs font-semibold uppercase tracking-[0.2em] opacity-80">Wallet balance</p>
+          <button
+            type="button"
+            class="h-9 w-9 -m-1 flex items-center justify-center rounded-lg text-white/80 transition-colors duration-200 hover:bg-white/10 hover:text-white disabled:opacity-50 cursor-pointer"
+            :disabled="walletStore.balanceLoading || walletStore.connecting"
+            aria-label="Refresh balance"
+            title="Refresh balance"
+            @click="refreshBalance()"
+          >
+            <IconSpinner v-if="walletStore.balanceLoading" class="h-4 w-4" />
+            <IconRefresh v-else class="h-4 w-4" />
+          </button>
+        </div>
         <p v-if="walletStore.balanceLoading" class="mt-1 text-sm opacity-80">Updating balance…</p>
         <p v-else-if="formattedBalance !== null" class="mt-1 text-4xl font-bold">{{ formattedBalance }} NIM</p>
         <p v-else-if="walletStore.balanceError" class="mt-1 flex items-center gap-2 text-sm text-white/90">
@@ -109,36 +119,9 @@ async function reconnectWallet() {
         Fiat values are temporarily unavailable.
       </p>
 
-      <div class="flex flex-col gap-2 border-t border-nimiq-border px-4 py-3">
-        <p v-if="walletStore.sessionRestored" class="text-xs text-nimiq-muted">
-          Using saved wallet access — no re-approval needed for balance checks.
-        </p>
-        <div class="flex gap-2">
-          <button
-            type="button"
-            class="min-h-[44px] flex-1 rounded-lg bg-nimiq-card-elevated px-3 text-sm font-medium transition-colors duration-200 hover:bg-white/10 disabled:opacity-50 cursor-pointer"
-            :disabled="walletStore.balanceLoading || walletStore.connecting"
-            @click="refreshBalance()"
-          >
-            {{ walletStore.balanceLoading ? 'Refreshing…' : 'Refresh balance' }}
-          </button>
-          <button
-            type="button"
-            class="min-h-[44px] flex-1 rounded-lg bg-nimiq-card-elevated px-3 text-sm font-medium transition-colors duration-200 hover:bg-white/10 disabled:opacity-50 cursor-pointer"
-            :disabled="walletStore.connecting || walletStore.balanceLoading"
-            @click="reconnectWallet()"
-          >
-            {{ walletStore.connecting ? 'Reconnecting…' : 'Reconnect' }}
-          </button>
-        </div>
-        <button
-          type="button"
-          class="min-h-[44px] rounded-lg px-3 text-sm text-nimiq-muted transition-colors duration-200 hover:text-white cursor-pointer"
-          @click="walletStore.disconnect()"
-        >
-          Forget saved wallet
-        </button>
-      </div>
+      <p v-if="walletStore.sessionRestored" class="border-t border-nimiq-border px-4 py-2 text-xs text-nimiq-muted">
+        Using saved wallet access — no re-approval needed for balance checks.
+      </p>
     </section>
 
     <div

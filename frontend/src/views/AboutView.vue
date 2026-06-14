@@ -4,6 +4,7 @@ import IconHexagon from '../components/icons/IconHexagon.vue'
 import IconGift from '../components/icons/IconGift.vue'
 import IconCheck from '../components/icons/IconCheck.vue'
 import IconAlert from '../components/icons/IconAlert.vue'
+import IconTrash from '../components/icons/IconTrash.vue'
 
 const walletStore = useWalletStore()
 </script>
@@ -68,6 +69,22 @@ const walletStore = useWalletStore()
         <IconAlert class="h-4 w-4 shrink-0" />
         Tip failed: {{ walletStore.tipError }}
       </div>
+    </template>
+
+    <template v-if="walletStore.address">
+      <h2 class="text-lg font-semibold text-nimiq-blue-light">Local data</h2>
+      <p class="text-nimiq-muted">
+        Your wallet address is saved on this device so NimLens can show your balance without
+        asking for access again.
+      </p>
+      <button
+        type="button"
+        class="min-h-[44px] flex items-center justify-center gap-2 rounded-lg bg-nimiq-card border border-nimiq-border px-4 font-medium text-nimiq-red-light transition-colors duration-200 hover:bg-nimiq-red/10 cursor-pointer"
+        @click="walletStore.disconnect()"
+      >
+        <IconTrash class="h-4 w-4" />
+        Forget saved wallet
+      </button>
     </template>
   </div>
 </template>
