@@ -52,7 +52,7 @@ func TestHealthHandler(t *testing.T) {
 func TestRatesHandler_Success(t *testing.T) {
 	cache := NewRatesCache(60*time.Second, func() (RatesResponse, error) {
 		return RatesResponse{
-			Rates:     map[string]AssetRates{"NIM": {EUR: 0.01, USD: 0.011, GBP: 0.009, CHF: 0.0095}},
+			Rates:     map[string]AssetRates{"NIM": {"EUR": 0.01, "USD": 0.011, "GBP": 0.009, "CHF": 0.0095}},
 			Timestamp: "2026-06-13T16:30:00Z",
 			FetchedAt: "2026-06-13T16:30:00Z",
 			Source:    "CoinGecko",
@@ -75,8 +75,8 @@ func TestRatesHandler_Success(t *testing.T) {
 	if resp.Source != "CoinGecko" {
 		t.Errorf("expected source CoinGecko, got %q", resp.Source)
 	}
-	if resp.Rates["NIM"].EUR != 0.01 {
-		t.Errorf("unexpected NIM EUR rate: %v", resp.Rates["NIM"].EUR)
+	if resp.Rates["NIM"]["EUR"] != 0.01 {
+		t.Errorf("unexpected NIM EUR rate: %v", resp.Rates["NIM"]["EUR"])
 	}
 }
 

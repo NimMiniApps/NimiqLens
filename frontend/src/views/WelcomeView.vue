@@ -2,7 +2,8 @@
 import { computed, onMounted } from 'vue'
 import { useWalletStore } from '../stores/wallet'
 import { useRatesStore } from '../stores/rates'
-import { convertNimBalanceToFiat, FIAT_CURRENCIES } from '../lib/convert'
+import { usePreferencesStore } from '../stores/preferences'
+import { convertNimBalanceToFiat, formatFiatAmount } from '../lib/convert'
 import IconHexagon from '../components/icons/IconHexagon.vue'
 import IconExchange from '../components/icons/IconExchange.vue'
 import IconQr from '../components/icons/IconQr.vue'
@@ -13,14 +14,16 @@ import IconRefresh from '../components/icons/IconRefresh.vue'
 
 const walletStore = useWalletStore()
 const ratesStore = useRatesStore()
+const preferencesStore = usePreferencesStore()
 
 onMounted(() => {
   if (!ratesStore.rates) ratesStore.load()
 })
 
-const fiatValues = computed(() => {
+const fiatValue = computed(() => {
   if (walletStore.balanceNim === null || !ratesStore.rates) return null
-  return convertNimBalanceToFiat(walletStore.balanceNim, ratesStore.rates.rates.NIM)
+  const values = convertNimBalanceToFiat(walletStore.balanceNim, ratesStore.rates.rates.NIM)
+  return values[preferencesStore.fiatCurrency]
 })
 
 const formattedBalance = computed(() => {
@@ -101,15 +104,9 @@ async function refreshBalance() {
         </p>
       </div>
 
-      <div v-if="fiatValues" class="grid grid-cols-2 gap-px bg-nimiq-border">
-        <div
-          v-for="currency in FIAT_CURRENCIES"
-          :key="currency"
-          class="bg-nimiq-card px-4 py-3"
-        >
-          <p class="text-xs text-nimiq-muted">{{ currency }}</p>
-          <p class="text-lg font-semibold">{{ currency }} {{ fiatValues[currency].toFixed(2) }}</p>
-        </div>
+      <div v-if="fiatValue !== null" class="px-4 py-3">
+        <p class="text-xs text-nimiq-muted">Approximate value</p>
+        <p class="text-lg font-semibold">{{ preferencesStore.fiatCurrency }} {{ formatFiatAmount(preferencesStore.fiatCurrency, fiatValue) }}</p>
       </div>
       <p v-else-if="ratesStore.loading" class="px-4 py-3 text-sm text-nimiq-muted">
         Loading conversion rates…

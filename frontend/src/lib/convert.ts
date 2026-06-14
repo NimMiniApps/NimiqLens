@@ -1,9 +1,31 @@
 export type Asset = 'NIM' | 'USDT' | 'BTC' | 'ETH'
-export type FiatCurrency = 'EUR' | 'USD' | 'GBP' | 'CHF'
+export type FiatCurrency = 'EUR' | 'USD' | 'GBP' | 'CHF' | 'JPY' | 'CNY' | 'AUD' | 'CAD' | 'INR' | 'BRL'
 
 export const ASSETS: Asset[] = ['NIM', 'USDT', 'BTC', 'ETH']
-export const FIAT_CURRENCIES: FiatCurrency[] = ['EUR', 'USD', 'GBP', 'CHF']
+
+/** Most commonly used fiat currency for each major region. */
+export const FIAT_CURRENCIES: FiatCurrency[] = [
+  'EUR', // Europe
+  'USD', // United States
+  'GBP', // United Kingdom
+  'CHF', // Switzerland
+  'JPY', // Japan
+  'CNY', // China
+  'AUD', // Australia
+  'CAD', // Canada
+  'INR', // India
+  'BRL', // Brazil
+]
 export type FiatValues = Record<FiatCurrency, number>
+
+/** Fiat currencies that are conventionally displayed without decimal places. */
+const ZERO_DECIMAL_FIAT_CURRENCIES: ReadonlySet<FiatCurrency> = new Set(['JPY'])
+
+/** Formats a fiat amount with the decimal precision conventional for the currency. */
+export function formatFiatAmount(currency: FiatCurrency, amount: number): string {
+  const decimals = ZERO_DECIMAL_FIAT_CURRENCIES.has(currency) ? 0 : 2
+  return amount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+}
 
 /** assetAmount = fiatAmount / assetPriceInFiat */
 export function computeAssetAmount(fiatAmount: number, rate: number): number {

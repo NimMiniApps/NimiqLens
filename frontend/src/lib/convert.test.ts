@@ -47,11 +47,23 @@ describe('convertNimBalanceToFiat', () => {
       USD: 0.011,
       GBP: 0.009,
       CHF: 0.0095,
+      JPY: 1.6,
+      CNY: 0.078,
+      AUD: 0.0165,
+      CAD: 0.0148,
+      INR: 0.9,
+      BRL: 0.054,
     })
 
     expect(values.EUR).toBeCloseTo(1)
     expect(values.USD).toBeCloseTo(1.1)
     expect(values.GBP).toBeCloseTo(0.9)
     expect(values.CHF).toBeCloseTo(0.95)
+    expect(values.JPY).toBeCloseTo(160)
+    expect(values.CNY).toBeCloseTo(7.8)
+    expect(values.AUD).toBeCloseTo(1.65)
+    expect(values.CAD).toBeCloseTo(1.48)
+    expect(values.INR).toBeCloseTo(90)
+    expect(values.BRL).toBeCloseTo(5.4)
   })
 })

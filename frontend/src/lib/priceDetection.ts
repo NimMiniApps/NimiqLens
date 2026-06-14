@@ -12,7 +12,12 @@ const SYMBOL_CURRENCY: Record<string, FiatCurrency> = {
   '€': 'EUR',
   $: 'USD',
   '£': 'GBP',
+  '¥': 'JPY',
+  '₹': 'INR',
 }
+
+/** Currency codes recognized as a suffix or prefix next to an amount (e.g. "12.99 AUD"). */
+const CURRENCY_CODES = 'EUR|USD|GBP|CHF|JPY|CNY|AUD|CAD|INR|BRL'
 
 interface PricePattern {
   regex: RegExp
@@ -21,21 +26,21 @@ interface PricePattern {
 }
 
 const PATTERNS: PricePattern[] = [
-  // €12.99, $24.50, £9.99
+  // €12.99, $24.50, £9.99, ¥1500, ₹999
   {
-    regex: new RegExp(`([€$£])\\s?(${NUMBER})`),
+    regex: new RegExp(`([€$£¥₹])\\s?(${NUMBER})`),
     currency: (m) => SYMBOL_CURRENCY[m[1]],
     amount: (m) => m[2],
   },
-  // 12,99 EUR / 24.50 USD / 9.99 GBP / 12.99 CHF
+  // 12,99 EUR / 24.50 USD / 9.99 GBP / 12.99 CHF / 1500 JPY / ...
   {
-    regex: new RegExp(`(${NUMBER})\\s?(EUR|USD|GBP|CHF)`, 'i'),
+    regex: new RegExp(`(${NUMBER})\\s?(${CURRENCY_CODES})`, 'i'),
     currency: (m) => m[2].toUpperCase() as FiatCurrency,
     amount: (m) => m[1],
   },
-  // EUR 12.99 / USD 24.50 / GBP 9.99
+  // EUR 12.99 / USD 24.50 / GBP 9.99 / JPY 1500 / ...
   {
-    regex: new RegExp(`(EUR|USD|GBP)\\s?(${NUMBER})`, 'i'),
+    regex: new RegExp(`(${CURRENCY_CODES})\\s?(${NUMBER})`, 'i'),
     currency: (m) => m[1].toUpperCase() as FiatCurrency,
     amount: (m) => m[2],
   },
