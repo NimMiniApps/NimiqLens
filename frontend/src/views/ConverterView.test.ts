@@ -65,38 +65,20 @@ describe('ConverterView', () => {
     expect(wrapper.text()).toContain('more NIM')
   })
 
-  it('shows the required and spendable amounts when the wallet cannot afford the price', async () => {
+  it('shows the required balance when the wallet cannot afford the price', async () => {
     const ratesStore = useRatesStore()
     ratesStore.$patch({ rates: { ...sampleRates, rates: { ...sampleRates.rates, NIM: { ...sampleRates.rates.NIM, EUR: 0.0005 } } } })
     const walletStore = useWalletStore()
     walletStore.$patch({
       address: 'NQ07 0000 0000 0000 0000 0000 0000 0000 0000',
       balanceNim: 10000,
-      spendableBalanceNim: 10000,
     })
 
     const wrapper = mount(ConverterView)
     await wrapper.find('input[type="number"]').setValue(10)
 
     expect(wrapper.text()).toContain('Price requires ≈ 20,000.00 NIM')
-    expect(wrapper.text()).toContain('You have 10,000.00 spendable NIM')
-  })
-
-  it('explains when part of the displayed wallet total is locked', async () => {
-    const ratesStore = useRatesStore()
-    ratesStore.$patch({ rates: sampleRates })
-    const walletStore = useWalletStore()
-    walletStore.$patch({
-      address: 'NQ07 0000 0000 0000 0000 0000 0000 0000 0000',
-      balanceNim: 10000,
-      spendableBalanceNim: 1000,
-      lockedBalanceNim: 9000,
-    })
-
-    const wrapper = mount(ConverterView)
-    await wrapper.find('input[type="number"]').setValue(20)
-
-    expect(wrapper.text()).toContain('9,000.00 NIM is locked and cannot currently be spent')
+    expect(wrapper.text()).toContain('You have 10,000.00 NIM')
   })
 
   it('shows the stale-rate banner when rates are stale', () => {

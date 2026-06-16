@@ -9,7 +9,6 @@ import { affordability } from '../lib/affordability'
 import AssetIcon from '../components/icons/AssetIcon.vue'
 import IconAlert from '../components/icons/IconAlert.vue'
 import IconCheck from '../components/icons/IconCheck.vue'
-import IconLock from '../components/icons/IconLock.vue'
 
 const ratesStore = useRatesStore()
 const walletStore = useWalletStore()
@@ -49,10 +48,8 @@ const nimAmountNeeded = computed((): number | null => {
 
 const affordabilityResult = computed(() => {
   if (nimAmountNeeded.value === null) return null
-  return affordability(walletStore.spendableBalanceNim ?? walletStore.balanceNim, nimAmountNeeded.value)
+  return affordability(walletStore.balanceNim, nimAmountNeeded.value)
 })
-
-const spendableBalance = computed(() => walletStore.spendableBalanceNim ?? walletStore.balanceNim)
 
 function formatNim(amount: number): string {
   return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -130,12 +127,8 @@ function relativeTime(iso: string): string {
       <p v-if="nimAmountNeeded !== null" class="mt-2 text-sm text-nimiq-muted">
         Price requires ≈ {{ formatNim(nimAmountNeeded) }} NIM
       </p>
-      <p v-if="spendableBalance !== null" class="mt-1 text-sm text-nimiq-muted">
-        You have {{ formatNim(spendableBalance) }} spendable NIM
-      </p>
-      <p v-if="walletStore.lockedBalanceNim" class="mt-1 flex items-center gap-1.5 text-sm text-nimiq-muted">
-        <IconLock class="h-3.5 w-3.5 shrink-0" />
-        {{ formatNim(walletStore.lockedBalanceNim) }} NIM is locked and cannot currently be spent
+      <p v-if="walletStore.balanceNim !== null" class="mt-1 text-sm text-nimiq-muted">
+        You have {{ formatNim(walletStore.balanceNim) }} NIM
       </p>
     </div>
     <div

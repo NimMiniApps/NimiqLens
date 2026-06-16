@@ -8,7 +8,6 @@ import IconHexagon from '../components/icons/IconHexagon.vue'
 import IconExchange from '../components/icons/IconExchange.vue'
 import IconQr from '../components/icons/IconQr.vue'
 import IconAlert from '../components/icons/IconAlert.vue'
-import IconLock from '../components/icons/IconLock.vue'
 import IconSpinner from '../components/icons/IconSpinner.vue'
 import IconRefresh from '../components/icons/IconRefresh.vue'
 
@@ -98,10 +97,6 @@ async function refreshBalance() {
         </p>
         <p v-else class="mt-1 font-medium">Balance unavailable</p>
         <p class="mt-2 text-sm opacity-80">{{ walletStore.shortAddress }}</p>
-        <p v-if="walletStore.lockedBalanceNim" class="mt-2 flex items-center gap-1.5 text-sm font-medium opacity-90">
-          <IconLock class="h-3.5 w-3.5 shrink-0" />
-          {{ walletStore.lockedBalanceNim.toFixed(2) }} NIM is currently locked in swaps
-        </p>
       </div>
 
       <div v-if="fiatValue !== null" class="px-4 py-3">

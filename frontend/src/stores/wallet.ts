@@ -10,8 +10,8 @@ import {
   writeCachedWalletAddress,
 } from '../lib/walletSession'
 
-/** 5 NIM, in Luna (1 NIM = 100,000 Luna). */
-export const TIP_AMOUNT_LUNA = 500_000
+/** 1000 NIM, in Luna (1 NIM = 100,000 Luna). */
+export const TIP_AMOUNT_LUNA = 100_000_000
 const ACCOUNT_REQUEST_TIMEOUT_MS = 15_000
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -33,8 +33,6 @@ export const useWalletStore = defineStore('wallet', {
     sessionRestored: false,
     balanceLoading: false,
     balanceNim: null as number | null,
-    spendableBalanceNim: null as number | null,
-    lockedBalanceNim: null as number | null,
     balanceError: null as string | null,
     tipTxHash: null as string | null,
     tipError: null as string | null,
@@ -88,8 +86,6 @@ export const useWalletStore = defineStore('wallet', {
     disconnect() {
       this.address = null
       this.balanceNim = null
-      this.spendableBalanceNim = null
-      this.lockedBalanceNim = null
       this.balanceError = null
       this.connectionError = null
       this.sessionRestored = false
@@ -105,18 +101,10 @@ export const useWalletStore = defineStore('wallet', {
         const resp = rpc && provider
           ? await fetchBalanceFromProvider(provider, this.address)
           : await fetchBalance(this.address)
-        this.balanceNim = 'total_nim' in resp && typeof resp.total_nim === 'number'
-          ? resp.total_nim
-          : resp.balance_nim
-        this.spendableBalanceNim = resp.balance_nim
-        this.lockedBalanceNim = 'locked_nim' in resp && typeof resp.locked_nim === 'number'
-          ? resp.locked_nim
-          : 0
+        this.balanceNim = resp.balance_nim
       } catch (e) {
         this.balanceError = e instanceof Error ? e.message : String(e)
         this.balanceNim = null
-        this.spendableBalanceNim = null
-        this.lockedBalanceNim = null
       } finally {
         this.balanceLoading = false
       }

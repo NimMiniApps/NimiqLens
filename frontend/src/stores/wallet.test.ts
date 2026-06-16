@@ -126,13 +126,11 @@ describe('useWalletStore', () => {
 
   it('loads balance through Nimiq Pay RPC when available', async () => {
     vi.spyOn(api, 'fetchBalance')
-    const call = vi.fn()
-      .mockResolvedValueOnce({
-        address: ADDRESS,
-        balance: 100_000_000,
-        type: 'basic',
-      })
-      .mockResolvedValueOnce([])
+    const call = vi.fn().mockResolvedValueOnce({
+      address: ADDRESS,
+      balance: 100_000_000,
+      type: 'basic',
+    })
     vi.spyOn(nimiq, 'initNimiq').mockResolvedValue({
       listAccounts: vi.fn().mockResolvedValue([ADDRESS]),
       getRPC: () => ({ call }),

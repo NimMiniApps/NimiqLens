@@ -79,7 +79,7 @@ const fiatCurrency = computed<FiatCurrency>({
         @click="walletStore.sendTip()"
       >
         <IconGift class="h-5 w-5" />
-        Tip 5 NIM
+        Tip 1000 NIM
       </button>
       <div v-if="walletStore.tipTxHash" class="flex items-center gap-2 text-sm text-nimiq-green-light">
         <IconCheck class="h-4 w-4 shrink-0" />
