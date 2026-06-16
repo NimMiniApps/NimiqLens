@@ -4,6 +4,9 @@ export const TARGET_WIDTH_RATIO = 0.75
 /** Height of the centered target box as a fraction of the visible preview. */
 export const TARGET_HEIGHT_RATIO = 0.35
 
+/** Vertical scan offsets, as fractions of the visible preview height. */
+export const TARGET_VERTICAL_OFFSETS = [0, 0.22] as const
+
 /** Upscale factor applied before OCR preprocessing. */
 export const PREPROCESS_SCALE = 2
 
@@ -73,15 +76,23 @@ export function getVisibleFrameRect(
  * portion of the frame so it matches what the user actually sees and aims at.
  */
 export function getTargetCropRect(sourceWidth: number, sourceHeight: number): CropRect {
+  return getTargetCropRects(sourceWidth, sourceHeight)[0]
+}
+
+export function getTargetCropRects(sourceWidth: number, sourceHeight: number): CropRect[] {
   const visible = getVisibleFrameRect(sourceWidth, sourceHeight)
   const width = Math.round(visible.width * TARGET_WIDTH_RATIO)
   const height = Math.round(visible.height * TARGET_HEIGHT_RATIO)
-  return {
-    x: visible.x + Math.round((visible.width - width) / 2),
-    y: visible.y + Math.round((visible.height - height) / 2),
+  const x = visible.x + Math.round((visible.width - width) / 2)
+  const centeredY = visible.y + Math.round((visible.height - height) / 2)
+  const maxY = visible.y + visible.height - height
+
+  return TARGET_VERTICAL_OFFSETS.map((offset) => ({
+    x,
+    y: Math.max(visible.y, Math.min(maxY, centeredY + Math.round(visible.height * offset))),
     width,
     height,
-  }
+  }))
 }
 
 function toGrayscale(r: number, g: number, b: number): number {
@@ -348,7 +359,37 @@ export function captureAndPreprocessTarget(
   video: HTMLVideoElement,
   workCanvas: HTMLCanvasElement,
 ): HTMLCanvasElement[] {
-  const cropped = captureTargetCrop(video, workCanvas)
-  if (!cropped) return []
-  return preprocessTargetRegion(cropped)
+  workCanvas.width = video.videoWidth
+  workCanvas.height = video.videoHeight
+
+  const ctx = workCanvas.getContext('2d')
+  if (!ctx) return []
+
+  ctx.drawImage(video, 0, 0, workCanvas.width, workCanvas.height)
+  const rects = getTargetCropRects(workCanvas.width, workCanvas.height)
+  const variants: HTMLCanvasElement[] = []
+
+  for (const rect of rects) {
+    const cropped = document.createElement('canvas')
+    cropped.width = rect.width
+    cropped.height = rect.height
+    const croppedCtx = cropped.getContext('2d')
+    if (!croppedCtx) continue
+
+    croppedCtx.drawImage(
+      workCanvas,
+      rect.x,
+      rect.y,
+      rect.width,
+      rect.height,
+      0,
+      0,
+      rect.width,
+      rect.height,
+    )
+
+    variants.push(...preprocessTargetRegion(cropped))
+  }
+
+  return variants
 }

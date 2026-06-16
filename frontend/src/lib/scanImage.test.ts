@@ -4,6 +4,7 @@ import {
   TARGET_WIDTH_RATIO,
   PREPROCESS_SCALE,
   DISPLAY_ASPECT_RATIO,
+  TARGET_VERTICAL_OFFSETS,
   VARIANT_MODES,
   MIN_SHARPNESS_SCORE,
   MIN_CONTRAST_SCORE,
@@ -14,6 +15,7 @@ import {
   computeMotionScore,
   assessFrameQuality,
   getTargetCropRect,
+  getTargetCropRects,
   getVisibleFrameRect,
   preprocessPixels,
   preprocessTargetRegion,
@@ -67,6 +69,22 @@ describe('getTargetCropRect', () => {
     expect(rect.height).toBe(Math.round(1080 * TARGET_HEIGHT_RATIO))
     expect(rect.x).toBe(Math.round((1920 - rect.width) / 2))
     expect(rect.y).toBe(Math.round((1080 - rect.height) / 2))
+  })
+
+  it('adds additional in-bounds lower crop windows for price tags whose price sits below center', () => {
+    const visible = getVisibleFrameRect(736, 734)
+    const rects = getTargetCropRects(736, 734)
+
+    expect(rects).toHaveLength(TARGET_VERTICAL_OFFSETS.length)
+    expect(rects[0]).toEqual(getTargetCropRect(736, 734))
+    expect(rects[1].y).toBeGreaterThan(rects[0].y)
+
+    for (const rect of rects) {
+      expect(rect.x).toBeGreaterThanOrEqual(visible.x)
+      expect(rect.y).toBeGreaterThanOrEqual(visible.y)
+      expect(rect.x + rect.width).toBeLessThanOrEqual(visible.x + visible.width)
+      expect(rect.y + rect.height).toBeLessThanOrEqual(visible.y + visible.height)
+    }
   })
 })
 
