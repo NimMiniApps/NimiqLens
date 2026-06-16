@@ -5,7 +5,7 @@ import { useScanStore } from '../stores/scan'
 import { usePreferencesStore } from '../stores/preferences'
 import { detectPrice, type DetectedPrice } from '../lib/priceDetection'
 import { prepareOcrWorker, recognizeText, terminateOcrWorker, maxDigitWordConfidence, MIN_OCR_CONFIDENCE } from '../lib/ocr'
-import { captureAndPreprocessTarget, TARGET_HEIGHT_RATIO, TARGET_WIDTH_RATIO } from '../lib/scanImage'
+import { captureAndPreprocessTarget, captureTargetCrop, assessFrameQuality, getGrayscaleFromCanvas, TARGET_HEIGHT_RATIO, TARGET_WIDTH_RATIO } from '../lib/scanImage'
 import { createPriceCandidateTracker } from '../lib/priceCandidate'
 import { FIAT_CURRENCIES, type FiatCurrency } from '../lib/convert'
 import IconCamera from '../components/icons/IconCamera.vue'
@@ -13,7 +13,7 @@ import IconExchange from '../components/icons/IconExchange.vue'
 import IconAlert from '../components/icons/IconAlert.vue'
 import IconCheck from '../components/icons/IconCheck.vue'
 
-const SCAN_INTERVAL_MS = 1500
+const LIVE_SAMPLE_INTERVAL_MS = 100
 
 const router = useRouter()
 const scanStore = useScanStore()
@@ -34,11 +34,12 @@ const noPriceFound = ref(false)
 const detected = ref(false)
 const editAmount = ref<number | null>(null)
 const editCurrency = ref<FiatCurrency>(preferencesStore.fiatCurrency)
-const guidance = ref<'searching' | 'hold-steady' | 'move-closer'>('searching')
+const guidance = ref<'searching' | 'hold-steady' | 'move-closer' | 'too-blurry' | 'low-contrast'>('searching')
 
 let autoScanActive = false
-let scanTimer: ReturnType<typeof setTimeout> | null = null
+let liveLoopTimer: ReturnType<typeof setInterval> | null = null
 let scanInFlight = false
+let previousGrayscale: Uint8Array | null = null
 
 async function ensureOcrReady(): Promise<boolean> {
   scannerError.value = null
@@ -57,6 +58,10 @@ const guidanceText = computed(() => {
   switch (guidance.value) {
     case 'hold-steady':
       return 'Hold steady…'
+    case 'too-blurry':
+      return 'Image is blurry — hold steady'
+    case 'low-contrast':
+      return 'Improve lighting or move closer'
     case 'move-closer':
       return 'Move closer to the price'
     default:
@@ -96,23 +101,68 @@ function stopCamera() {
 
 function stopAutoScan() {
   autoScanActive = false
-  if (scanTimer) {
-    clearTimeout(scanTimer)
-    scanTimer = null
+  if (liveLoopTimer) {
+    clearInterval(liveLoopTimer)
+    liveLoopTimer = null
   }
+  previousGrayscale = null
 }
 
-function scheduleNextScan() {
+function updateGuidanceFromQuality(reason?: 'blur' | 'low-contrast' | 'motion') {
+  if (!reason) {
+    guidance.value = 'searching'
+    return
+  }
+  if (reason === 'blur') {
+    guidance.value = 'too-blurry'
+    return
+  }
+  if (reason === 'low-contrast') {
+    guidance.value = 'low-contrast'
+    return
+  }
+  guidance.value = 'hold-steady'
+}
+
+function startLiveLoop() {
   if (!autoScanActive || detected.value) return
-  scanTimer = setTimeout(() => {
-    void runScanCycle()
-  }, SCAN_INTERVAL_MS)
+  liveLoopTimer = setInterval(() => {
+    void sampleLiveFrame()
+  }, LIVE_SAMPLE_INTERVAL_MS)
 }
 
 function startAutoScan() {
   if (autoScanActive || detected.value || !stream.value || !ocrReady.value) return
   autoScanActive = true
-  scheduleNextScan()
+  previousGrayscale = null
+  void sampleLiveFrame()
+  startLiveLoop()
+}
+
+async function sampleLiveFrame() {
+  if (!autoScanActive || detected.value || !videoRef.value || !canvasRef.value) return
+
+  const crop = captureTargetCrop(videoRef.value, canvasRef.value)
+  if (!crop) return
+
+  const grayscale = getGrayscaleFromCanvas(crop)
+  if (grayscale.length === 0) return
+
+  const quality = assessFrameQuality(
+    grayscale,
+    crop.width,
+    crop.height,
+    previousGrayscale ?? undefined,
+  )
+  previousGrayscale = grayscale
+
+  if (!quality.acceptable) {
+    updateGuidanceFromQuality(quality.reason)
+    return
+  }
+
+  if (scanInFlight) return
+  await runScanCycle()
 }
 
 async function recognizePriceFromFrame(): Promise<DetectedPrice | null> {
@@ -163,7 +213,6 @@ async function runScanCycle() {
   } finally {
     scanInFlight = false
     scanning.value = false
-    scheduleNextScan()
   }
 }
 
@@ -201,6 +250,7 @@ function retry() {
   noPriceFound.value = false
   guidance.value = 'searching'
   priceTracker.reset()
+  previousGrayscale = null
   startAutoScan()
 }
 

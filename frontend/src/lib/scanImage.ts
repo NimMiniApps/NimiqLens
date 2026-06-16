@@ -7,6 +7,25 @@ export const TARGET_HEIGHT_RATIO = 0.35
 /** Upscale factor applied before OCR preprocessing. */
 export const PREPROCESS_SCALE = 2
 
+/** Minimum Laplacian-variance sharpness score for OCR to run. */
+export const MIN_SHARPNESS_SCORE = 50
+
+/** Minimum grayscale standard deviation for OCR to run. */
+export const MIN_CONTRAST_SCORE = 20
+
+/** Maximum mean absolute pixel delta between consecutive frames. */
+export const MAX_MOTION_SCORE = 15
+
+export type FrameQualityReason = 'blur' | 'low-contrast' | 'motion'
+
+export interface FrameQualityResult {
+  sharpness: number
+  contrast: number
+  motion: number
+  acceptable: boolean
+  reason?: FrameQualityReason
+}
+
 /** Aspect ratio (width / height) the camera preview is displayed at, matching the `aspect-video` CSS class. */
 export const DISPLAY_ASPECT_RATIO = 16 / 9
 
@@ -185,19 +204,117 @@ export function preprocessTargetRegion(
   )
 }
 
+/** Extracts per-pixel grayscale values from RGBA image data. */
+export function extractGrayscalePixels(data: Uint8ClampedArray): Uint8Array {
+  const gray = new Uint8Array(data.length / 4)
+  for (let i = 0, j = 0; i < data.length; i += 4, j += 1) {
+    gray[j] = toGrayscale(data[i], data[i + 1], data[i + 2])
+  }
+  return gray
+}
+
+/** Reads grayscale pixel values from a canvas. */
+export function getGrayscaleFromCanvas(canvas: HTMLCanvasElement): Uint8Array {
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return new Uint8Array(0)
+  const { width, height } = canvas
+  const imageData = ctx.getImageData(0, 0, width, height)
+  return extractGrayscalePixels(imageData.data)
+}
+
 /**
- * Captures the centered target region from a live video frame and returns
- * preprocessed OCR variants.
+ * Laplacian-variance sharpness score. Higher values indicate a sharper frame.
  */
-export function captureAndPreprocessTarget(
+export function computeSharpnessScore(grayscale: Uint8Array, width: number, height: number): number {
+  if (width < 3 || height < 3 || grayscale.length !== width * height) return 0
+
+  let sum = 0
+  let count = 0
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const idx = y * width + x
+      const lap =
+        -4 * grayscale[idx] +
+        grayscale[idx - 1] +
+        grayscale[idx + 1] +
+        grayscale[idx - width] +
+        grayscale[idx + width]
+      sum += lap * lap
+      count += 1
+    }
+  }
+
+  return count > 0 ? sum / count : 0
+}
+
+/** Grayscale standard deviation — higher values indicate richer contrast. */
+export function computeContrastScore(grayscale: Uint8Array): number {
+  if (grayscale.length === 0) return 0
+
+  let sum = 0
+  for (let i = 0; i < grayscale.length; i += 1) sum += grayscale[i]
+  const mean = sum / grayscale.length
+
+  let variance = 0
+  for (let i = 0; i < grayscale.length; i += 1) {
+    const delta = grayscale[i] - mean
+    variance += delta * delta
+  }
+
+  return Math.sqrt(variance / grayscale.length)
+}
+
+/** Mean absolute pixel delta between two grayscale buffers of equal length. */
+export function computeMotionScore(previous: Uint8Array, current: Uint8Array): number {
+  if (previous.length === 0 || previous.length !== current.length) return Infinity
+
+  let sum = 0
+  for (let i = 0; i < previous.length; i += 1) {
+    sum += Math.abs(current[i] - previous[i])
+  }
+
+  return sum / previous.length
+}
+
+/** Cheap gate that rejects blurry, flat, or moving frames before OCR. */
+export function assessFrameQuality(
+  grayscale: Uint8Array,
+  width: number,
+  height: number,
+  previousGrayscale?: Uint8Array,
+): FrameQualityResult {
+  const sharpness = computeSharpnessScore(grayscale, width, height)
+  const contrast = computeContrastScore(grayscale)
+  const motion =
+    previousGrayscale && previousGrayscale.length === grayscale.length
+      ? computeMotionScore(previousGrayscale, grayscale)
+      : 0
+
+  if (sharpness < MIN_SHARPNESS_SCORE) {
+    return { sharpness, contrast, motion, acceptable: false, reason: 'blur' }
+  }
+  if (contrast < MIN_CONTRAST_SCORE) {
+    return { sharpness, contrast, motion, acceptable: false, reason: 'low-contrast' }
+  }
+  if (motion > MAX_MOTION_SCORE) {
+    return { sharpness, contrast, motion, acceptable: false, reason: 'motion' }
+  }
+
+  return { sharpness, contrast, motion, acceptable: true }
+}
+
+/**
+ * Captures the centered target crop from a live video frame without preprocessing.
+ */
+export function captureTargetCrop(
   video: HTMLVideoElement,
   workCanvas: HTMLCanvasElement,
-): HTMLCanvasElement[] {
+): HTMLCanvasElement | null {
   workCanvas.width = video.videoWidth
   workCanvas.height = video.videoHeight
 
   const ctx = workCanvas.getContext('2d')
-  if (!ctx) return []
+  if (!ctx) return null
 
   ctx.drawImage(video, 0, 0, workCanvas.width, workCanvas.height)
   const rect = getTargetCropRect(workCanvas.width, workCanvas.height)
@@ -206,7 +323,7 @@ export function captureAndPreprocessTarget(
   cropped.width = rect.width
   cropped.height = rect.height
   const croppedCtx = cropped.getContext('2d')
-  if (!croppedCtx) return []
+  if (!croppedCtx) return null
 
   croppedCtx.drawImage(
     workCanvas,
@@ -220,5 +337,18 @@ export function captureAndPreprocessTarget(
     rect.height,
   )
 
+  return cropped
+}
+
+/**
+ * Captures the centered target region from a live video frame and returns
+ * preprocessed OCR variants.
+ */
+export function captureAndPreprocessTarget(
+  video: HTMLVideoElement,
+  workCanvas: HTMLCanvasElement,
+): HTMLCanvasElement[] {
+  const cropped = captureTargetCrop(video, workCanvas)
+  if (!cropped) return []
   return preprocessTargetRegion(cropped)
 }

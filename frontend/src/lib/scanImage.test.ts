@@ -5,7 +5,14 @@ import {
   PREPROCESS_SCALE,
   DISPLAY_ASPECT_RATIO,
   VARIANT_MODES,
+  MIN_SHARPNESS_SCORE,
+  MIN_CONTRAST_SCORE,
+  MAX_MOTION_SCORE,
   computeOtsuThreshold,
+  computeSharpnessScore,
+  computeContrastScore,
+  computeMotionScore,
+  assessFrameQuality,
   getTargetCropRect,
   getVisibleFrameRect,
   preprocessPixels,
@@ -140,5 +147,75 @@ describe('computeOtsuThreshold', () => {
 
     expect(threshold).toBeGreaterThanOrEqual(25)
     expect(threshold).toBeLessThan(220)
+  })
+})
+
+function makeCheckerboardGrayscale(width: number, height: number, cell = 4): Uint8Array {
+  const gray = new Uint8Array(width * height)
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const on = ((Math.floor(x / cell) + Math.floor(y / cell)) % 2) === 0
+      gray[y * width + x] = on ? 255 : 0
+    }
+  }
+  return gray
+}
+
+function makeUniformGrayscale(width: number, height: number, value: number): Uint8Array {
+  const gray = new Uint8Array(width * height)
+  for (let i = 0; i < gray.length; i += 1) gray[i] = value
+  return gray
+}
+
+describe('frame quality helpers', () => {
+  const width = 32
+  const height = 24
+
+  it('scores a sharp checkerboard higher than a uniform frame', () => {
+    const sharp = makeCheckerboardGrayscale(width, height)
+    const flat = makeUniformGrayscale(width, height, 128)
+
+    expect(computeSharpnessScore(sharp, width, height)).toBeGreaterThan(
+      computeSharpnessScore(flat, width, height),
+    )
+    expect(computeSharpnessScore(sharp, width, height)).toBeGreaterThanOrEqual(MIN_SHARPNESS_SCORE)
+  })
+
+  it('rejects low-contrast frames', () => {
+    const flat = makeUniformGrayscale(width, height, 120)
+
+    expect(computeContrastScore(flat)).toBeLessThan(MIN_CONTRAST_SCORE)
+    expect(assessFrameQuality(flat, width, height).acceptable).toBe(false)
+    expect(assessFrameQuality(flat, width, height).reason).toBe('blur')
+  })
+
+  it('measures motion between consecutive crops', () => {
+    const still = makeCheckerboardGrayscale(width, height)
+    const shifted = makeCheckerboardGrayscale(width, height, 2)
+
+    expect(computeMotionScore(still, still)).toBe(0)
+    expect(computeMotionScore(still, shifted)).toBeGreaterThan(MAX_MOTION_SCORE)
+  })
+
+  it('accepts a sharp, contrast-rich, stable frame', () => {
+    const frame = makeCheckerboardGrayscale(width, height)
+
+    const result = assessFrameQuality(frame, width, height, frame)
+
+    expect(result.acceptable).toBe(true)
+    expect(result.reason).toBeUndefined()
+    expect(result.sharpness).toBeGreaterThanOrEqual(MIN_SHARPNESS_SCORE)
+    expect(result.contrast).toBeGreaterThanOrEqual(MIN_CONTRAST_SCORE)
+    expect(result.motion).toBeLessThanOrEqual(MAX_MOTION_SCORE)
+  })
+
+  it('rejects a moving frame even when sharp and contrast-rich', () => {
+    const previous = makeCheckerboardGrayscale(width, height)
+    const current = makeCheckerboardGrayscale(width, height, 2)
+
+    const result = assessFrameQuality(current, width, height, previous)
+
+    expect(result.acceptable).toBe(false)
+    expect(result.reason).toBe('motion')
   })
 })

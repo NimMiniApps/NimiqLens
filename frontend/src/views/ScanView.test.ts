@@ -2,12 +2,28 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ScanView from './ScanView.vue'
+import type { FrameQualityResult } from '../lib/scanImage'
+
+const LIVE_SAMPLE_INTERVAL_MS = 100
 
 const mocks = vi.hoisted(() => ({
   recognizeText: vi.fn(),
   prepareOcrWorker: vi.fn(async () => {}),
   terminateOcrWorker: vi.fn(async () => {}),
   captureAndPreprocessTarget: vi.fn(() => [document.createElement('canvas')]),
+  captureTargetCrop: vi.fn(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 32
+    canvas.height = 24
+    return canvas
+  }),
+  getGrayscaleFromCanvas: vi.fn(() => new Uint8Array(32 * 24)),
+  assessFrameQuality: vi.fn((): FrameQualityResult => ({
+    sharpness: 100,
+    contrast: 50,
+    motion: 0,
+    acceptable: true,
+  })),
 }))
 
 vi.mock('../lib/ocr', async () => {
@@ -25,6 +41,9 @@ vi.mock('../lib/scanImage', async () => {
   return {
     ...actual,
     captureAndPreprocessTarget: mocks.captureAndPreprocessTarget,
+    captureTargetCrop: mocks.captureTargetCrop,
+    getGrayscaleFromCanvas: mocks.getGrayscaleFromCanvas,
+    assessFrameQuality: mocks.assessFrameQuality,
   }
 })
 
@@ -61,7 +80,23 @@ beforeEach(() => {
   mocks.prepareOcrWorker.mockClear()
   mocks.terminateOcrWorker.mockClear()
   mocks.captureAndPreprocessTarget.mockClear()
+  mocks.captureTargetCrop.mockClear()
+  mocks.getGrayscaleFromCanvas.mockClear()
+  mocks.assessFrameQuality.mockClear()
   mocks.captureAndPreprocessTarget.mockReturnValue([document.createElement('canvas')])
+  mocks.captureTargetCrop.mockImplementation(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 32
+    canvas.height = 24
+    return canvas
+  })
+  mocks.getGrayscaleFromCanvas.mockReturnValue(new Uint8Array(32 * 24))
+  mocks.assessFrameQuality.mockReturnValue({
+    sharpness: 100,
+    contrast: 50,
+    motion: 0,
+    acceptable: true,
+  } satisfies FrameQualityResult)
 })
 
 afterEach(() => {
@@ -101,21 +136,68 @@ describe('ScanView', () => {
   })
 
   it('shows the target overlay while the camera is active', async () => {
+    mocks.recognizeText.mockImplementation(() => new Promise(() => {}))
     const wrapper = await mountWithCamera()
 
     expect(wrapper.find('[aria-hidden="true"] .border-dashed').exists()).toBe(true)
     expect(wrapper.text()).toContain('Point the price at the box')
   })
 
-  it('automatically scans on a recurring interval', async () => {
+  it('starts OCR on the first good frame without waiting 1500ms', async () => {
     mocks.recognizeText.mockResolvedValue({ text: 'no price here', confidence: 80, words: [] })
     await mountWithCamera()
 
-    await vi.advanceTimersByTimeAsync(1500)
+    await flushPromises()
     expect(mocks.captureAndPreprocessTarget).toHaveBeenCalledTimes(1)
 
-    await vi.advanceTimersByTimeAsync(1500)
+    await vi.advanceTimersByTimeAsync(LIVE_SAMPLE_INTERVAL_MS)
+    await flushPromises()
     expect(mocks.captureAndPreprocessTarget).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not trigger OCR when frame quality is too low', async () => {
+    mocks.assessFrameQuality.mockReturnValue({
+      sharpness: 5,
+      contrast: 5,
+      motion: 0,
+      acceptable: false,
+      reason: 'blur',
+    })
+    mocks.recognizeText.mockResolvedValue({ text: 'no price here', confidence: 80, words: [] })
+    await mountWithCamera()
+
+    await vi.advanceTimersByTimeAsync(LIVE_SAMPLE_INTERVAL_MS * 5)
+    await flushPromises()
+
+    expect(mocks.captureTargetCrop).toHaveBeenCalled()
+    expect(mocks.captureAndPreprocessTarget).not.toHaveBeenCalled()
+    expect(mocks.recognizeText).not.toHaveBeenCalled()
+  })
+
+  it('triggers OCR as soon as the scheduler sees a good frame', async () => {
+    mocks.assessFrameQuality
+      .mockReturnValueOnce({
+        sharpness: 5,
+        contrast: 5,
+        motion: 0,
+        acceptable: false,
+        reason: 'blur',
+      })
+      .mockReturnValue({
+        sharpness: 100,
+        contrast: 50,
+        motion: 0,
+        acceptable: true,
+      })
+    mocks.recognizeText.mockResolvedValue({ text: 'no price here', confidence: 80, words: [] })
+    await mountWithCamera()
+
+    await flushPromises()
+    expect(mocks.captureAndPreprocessTarget).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(LIVE_SAMPLE_INTERVAL_MS)
+    await flushPromises()
+    expect(mocks.captureAndPreprocessTarget).toHaveBeenCalledTimes(1)
   })
 
   it('accepts a price after two consecutive stable scans', async () => {
@@ -125,12 +207,10 @@ describe('ScanView', () => {
       words: [{ text: '12.99', confidence: 80 }],
     })
     const wrapper = await mountWithCamera()
-
-    await vi.advanceTimersByTimeAsync(1500)
     await flushPromises()
     expect(wrapper.text()).toContain('Hold steady…')
 
-    await vi.advanceTimersByTimeAsync(1500)
+    await vi.advanceTimersByTimeAsync(LIVE_SAMPLE_INTERVAL_MS)
     await flushPromises()
 
     expect(wrapper.text()).toContain('Detected: 12.99 EUR')
@@ -181,13 +261,14 @@ describe('ScanView', () => {
     })
     const wrapper = await mountWithCamera()
 
-    await vi.advanceTimersByTimeAsync(3000)
+    await vi.advanceTimersByTimeAsync(LIVE_SAMPLE_INTERVAL_MS * 2)
     await flushPromises()
     mocks.captureAndPreprocessTarget.mockClear()
     mocks.recognizeText.mockResolvedValue({ text: 'no price here', confidence: 80, words: [] })
 
     await wrapper.get('[data-testid="retry"]').trigger('click')
-    await vi.advanceTimersByTimeAsync(1500)
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(LIVE_SAMPLE_INTERVAL_MS)
     await flushPromises()
 
     expect(mocks.captureAndPreprocessTarget).toHaveBeenCalled()
@@ -195,7 +276,14 @@ describe('ScanView', () => {
     expect(wrapper.text()).not.toContain('Detected:')
   })
 
-  it('supports manual scan now as a fallback', async () => {
+  it('supports manual scan now as a fallback without waiting for frame quality', async () => {
+    mocks.assessFrameQuality.mockReturnValue({
+      sharpness: 5,
+      contrast: 5,
+      motion: 0,
+      acceptable: false,
+      reason: 'blur',
+    })
     mocks.recognizeText.mockResolvedValue({
       text: '€24.50',
       confidence: 80,
@@ -207,14 +295,17 @@ describe('ScanView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Detected: 24.5 EUR')
+    expect(mocks.captureAndPreprocessTarget).toHaveBeenCalled()
   })
 
   it('chooses the strongest valid OCR candidate across preprocessing variants', async () => {
+    const wrapper = await mountWithCamera()
     mocks.captureAndPreprocessTarget.mockReturnValue([
       document.createElement('canvas'),
       document.createElement('canvas'),
     ])
     mocks.recognizeText
+      .mockReset()
       .mockResolvedValueOnce({
         text: '€12.00',
         confidence: 62,
@@ -225,12 +316,36 @@ describe('ScanView', () => {
         confidence: 95,
         words: [{ text: '12.99', confidence: 95 }],
       })
-    const wrapper = await mountWithCamera()
 
     await wrapper.get('[data-testid="scan-now"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain('Detected: 12.99 EUR')
+  })
+
+  it('does not run parallel OCR jobs while one is in flight', async () => {
+    let resolveOcr: (value: unknown) => void = () => {}
+    mocks.recognizeText.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveOcr = resolve
+        }),
+    )
+    await mountWithCamera()
+
+    await flushPromises()
+    expect(mocks.captureAndPreprocessTarget).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(LIVE_SAMPLE_INTERVAL_MS * 3)
+    await flushPromises()
+    expect(mocks.captureAndPreprocessTarget).toHaveBeenCalledTimes(1)
+
+    resolveOcr({ text: 'no price here', confidence: 80, words: [] })
+    await flushPromises()
+
+    await vi.advanceTimersByTimeAsync(LIVE_SAMPLE_INTERVAL_MS)
+    await flushPromises()
+    expect(mocks.captureAndPreprocessTarget).toHaveBeenCalledTimes(2)
   })
 
   it('pauses automatic scanning while the page is hidden', async () => {
@@ -240,8 +355,71 @@ describe('ScanView', () => {
     Object.defineProperty(document, 'hidden', { configurable: true, value: true })
     document.dispatchEvent(new Event('visibilitychange'))
     mocks.captureAndPreprocessTarget.mockClear()
+    mocks.captureTargetCrop.mockClear()
 
-    await vi.advanceTimersByTimeAsync(3000)
+    await vi.advanceTimersByTimeAsync(LIVE_SAMPLE_INTERVAL_MS * 5)
+    expect(mocks.captureTargetCrop).not.toHaveBeenCalled()
+    expect(mocks.captureAndPreprocessTarget).not.toHaveBeenCalled()
+  })
+
+  it('maps blur guidance to user-facing copy', async () => {
+    mocks.assessFrameQuality.mockReturnValue({
+      sharpness: 5,
+      contrast: 5,
+      motion: 0,
+      acceptable: false,
+      reason: 'blur',
+    })
+    const wrapper = await mountWithCamera()
+
+    await flushPromises()
+    expect(wrapper.text()).toContain('Image is blurry — hold steady')
+  })
+
+  it('maps low-contrast guidance to user-facing copy', async () => {
+    mocks.assessFrameQuality.mockReturnValue({
+      sharpness: 100,
+      contrast: 5,
+      motion: 0,
+      acceptable: false,
+      reason: 'low-contrast',
+    })
+    const wrapper = await mountWithCamera()
+
+    await flushPromises()
+    expect(wrapper.text()).toContain('Improve lighting or move closer')
+  })
+
+  it('maps motion guidance to hold-steady copy', async () => {
+    mocks.assessFrameQuality.mockReturnValue({
+      sharpness: 100,
+      contrast: 50,
+      motion: 30,
+      acceptable: false,
+      reason: 'motion',
+    })
+    const wrapper = await mountWithCamera()
+
+    await flushPromises()
+    expect(wrapper.text()).toContain('Hold steady…')
+  })
+
+  it('pauses the live loop after a stable detection', async () => {
+    mocks.recognizeText.mockResolvedValue({
+      text: '€12.99',
+      confidence: 80,
+      words: [{ text: '12.99', confidence: 80 }],
+    })
+    const wrapper = await mountWithCamera()
+
+    await vi.advanceTimersByTimeAsync(LIVE_SAMPLE_INTERVAL_MS * 2)
+    await flushPromises()
+    expect(wrapper.text()).toContain('Detected: 12.99 EUR')
+
+    mocks.captureAndPreprocessTarget.mockClear()
+    mocks.captureTargetCrop.mockClear()
+    await vi.advanceTimersByTimeAsync(LIVE_SAMPLE_INTERVAL_MS * 5)
+    expect(mocks.captureTargetCrop).not.toHaveBeenCalled()
     expect(mocks.captureAndPreprocessTarget).not.toHaveBeenCalled()
   })
 
