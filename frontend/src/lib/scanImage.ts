@@ -5,7 +5,7 @@ export const TARGET_WIDTH_RATIO = 0.75
 export const TARGET_HEIGHT_RATIO = 0.35
 
 /** Vertical scan offsets, as fractions of the visible preview height. */
-export const TARGET_VERTICAL_OFFSETS = [0, 0.22] as const
+export const TARGET_VERTICAL_OFFSETS = [0, 0.22, 0.44] as const
 
 /** Upscale factor applied before OCR preprocessing. */
 export const PREPROCESS_SCALE = 2
@@ -40,6 +40,9 @@ export interface CropRect {
 }
 
 export type PreprocessMode = 'grayscale' | 'threshold' | 'threshold-invert'
+
+const FOCUSED_SUBCROP_MIN_WIDTH = 300
+const FOCUSED_SUBCROP_MIN_HEIGHT = 100
 
 export const VARIANT_MODES = [
   { mode: 'grayscale' },
@@ -161,6 +164,29 @@ export function computeOtsuThreshold(source: Uint8ClampedArray): number {
   return bestThreshold
 }
 
+export type CanvasFactory = (width?: number, height?: number) => HTMLCanvasElement
+
+let canvasFactory: CanvasFactory | null = null
+
+/** Allows Node runners to supply a canvas implementation before calling scan helpers. */
+export function setCanvasFactory(factory: CanvasFactory | null): void {
+  canvasFactory = factory
+}
+
+function createProcessingCanvas(width = 1, height = 1): HTMLCanvasElement {
+  if (canvasFactory) {
+    const canvas = canvasFactory(width, height)
+    canvas.width = width
+    canvas.height = height
+    return canvas
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  return canvas
+}
+
 function createVariantCanvas(
   source: ImageData,
   width: number,
@@ -168,9 +194,7 @@ function createVariantCanvas(
   mode: PreprocessMode,
   threshold?: number,
 ): HTMLCanvasElement {
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
+  const canvas = createProcessingCanvas(width, height)
   const ctx = canvas.getContext('2d')
   if (!ctx) return canvas
 
@@ -188,9 +212,7 @@ export function preprocessTargetRegion(
   cropped: HTMLCanvasElement,
   scale = PREPROCESS_SCALE,
 ): HTMLCanvasElement[] {
-  const scaled = document.createElement('canvas')
-  scaled.width = cropped.width * scale
-  scaled.height = cropped.height * scale
+  const scaled = createProcessingCanvas(cropped.width * scale, cropped.height * scale)
   const scaledCtx = scaled.getContext('2d')
   if (!scaledCtx) return [scaled]
 
@@ -212,6 +234,36 @@ export function preprocessTargetRegion(
           : variant.threshold
         : undefined,
     ),
+  )
+}
+
+function getFocusedSubcrops(source: HTMLCanvasElement): HTMLCanvasElement[] {
+  if (source.width < FOCUSED_SUBCROP_MIN_WIDTH || source.height < FOCUSED_SUBCROP_MIN_HEIGHT) {
+    return []
+  }
+
+  const focusRects: CropRect[] = [
+    {
+      x: Math.round(source.width * 0.5),
+      y: Math.round(source.height * 0.42),
+      width: Math.round(source.width * 0.45),
+      height: Math.round(source.height * 0.45),
+    },
+    {
+      x: Math.round(source.width * 0.42),
+      y: 0,
+      width: Math.round(source.width * 0.53),
+      height: source.height,
+    },
+  ]
+
+  return focusRects.map((rect) =>
+    extractCropFromCanvas(source, {
+      x: Math.min(source.width - rect.width, Math.max(0, rect.x)),
+      y: Math.min(source.height - rect.height, Math.max(0, rect.y)),
+      width: Math.max(1, rect.width),
+      height: Math.max(1, rect.height),
+    }),
   )
 }
 
@@ -314,6 +366,73 @@ export function assessFrameQuality(
   return { sharpness, contrast, motion, acceptable: true }
 }
 
+/** Extracts a sub-region from a canvas into a new canvas. */
+export function extractCropFromCanvas(
+  source: HTMLCanvasElement,
+  rect: CropRect,
+): HTMLCanvasElement {
+  const cropped = createProcessingCanvas(rect.width, rect.height)
+  const croppedCtx = cropped.getContext('2d')
+  if (!croppedCtx) return cropped
+
+  croppedCtx.drawImage(
+    source,
+    rect.x,
+    rect.y,
+    rect.width,
+    rect.height,
+    0,
+    0,
+    rect.width,
+    rect.height,
+  )
+
+  return cropped
+}
+
+/** Returns target crop rects and extracted crop canvases for a static image. */
+export function getCropsFromStaticImage(source: HTMLCanvasElement): {
+  rect: CropRect
+  crop: HTMLCanvasElement
+}[] {
+  const rects = getTargetCropRects(source.width, source.height)
+  return rects.map((rect) => ({
+    rect,
+    crop: extractCropFromCanvas(source, rect),
+  }))
+}
+
+/** Returns preprocessed OCR variants for each target crop of a static image. */
+export function getPreprocessedCropsFromStaticImage(source: HTMLCanvasElement): {
+  rect: CropRect
+  variants: HTMLCanvasElement[]
+}[] {
+  return getCropsFromStaticImage(source).map(({ rect, crop }) => ({
+    rect,
+    variants: [
+      ...preprocessTargetRegion(crop),
+      ...getFocusedSubcrops(crop).flatMap((focused) => preprocessTargetRegion(focused)),
+    ],
+  }))
+}
+
+/**
+ * Draws a live video frame onto a work canvas and returns preprocessed OCR crops.
+ */
+export function capturePreprocessedCrops(
+  video: HTMLVideoElement,
+  workCanvas: HTMLCanvasElement,
+): { rect: CropRect; variants: HTMLCanvasElement[] }[] {
+  workCanvas.width = video.videoWidth
+  workCanvas.height = video.videoHeight
+
+  const ctx = workCanvas.getContext('2d')
+  if (!ctx) return []
+
+  ctx.drawImage(video, 0, 0, workCanvas.width, workCanvas.height)
+  return getPreprocessedCropsFromStaticImage(workCanvas)
+}
+
 /**
  * Captures the centered target crop from a live video frame without preprocessing.
  */
@@ -330,9 +449,7 @@ export function captureTargetCrop(
   ctx.drawImage(video, 0, 0, workCanvas.width, workCanvas.height)
   const rect = getTargetCropRect(workCanvas.width, workCanvas.height)
 
-  const cropped = document.createElement('canvas')
-  cropped.width = rect.width
-  cropped.height = rect.height
+  const cropped = createProcessingCanvas(rect.width, rect.height)
   const croppedCtx = cropped.getContext('2d')
   if (!croppedCtx) return null
 
@@ -353,43 +470,11 @@ export function captureTargetCrop(
 
 /**
  * Captures the centered target region from a live video frame and returns
- * preprocessed OCR variants.
+ * preprocessed OCR variants as a flat list.
  */
 export function captureAndPreprocessTarget(
   video: HTMLVideoElement,
   workCanvas: HTMLCanvasElement,
 ): HTMLCanvasElement[] {
-  workCanvas.width = video.videoWidth
-  workCanvas.height = video.videoHeight
-
-  const ctx = workCanvas.getContext('2d')
-  if (!ctx) return []
-
-  ctx.drawImage(video, 0, 0, workCanvas.width, workCanvas.height)
-  const rects = getTargetCropRects(workCanvas.width, workCanvas.height)
-  const variants: HTMLCanvasElement[] = []
-
-  for (const rect of rects) {
-    const cropped = document.createElement('canvas')
-    cropped.width = rect.width
-    cropped.height = rect.height
-    const croppedCtx = cropped.getContext('2d')
-    if (!croppedCtx) continue
-
-    croppedCtx.drawImage(
-      workCanvas,
-      rect.x,
-      rect.y,
-      rect.width,
-      rect.height,
-      0,
-      0,
-      rect.width,
-      rect.height,
-    )
-
-    variants.push(...preprocessTargetRegion(cropped))
-  }
-
-  return variants
+  return capturePreprocessedCrops(video, workCanvas).flatMap((crop) => crop.variants)
 }

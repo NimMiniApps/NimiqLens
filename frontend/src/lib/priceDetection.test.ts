@@ -109,4 +109,8 @@ describe('detectPrice', () => {
   it('detects a fallback-currency price when OCR drops the separator between whole and cents', () => {
     expect(detectPrice('3 99', 'EUR')).toEqual({ amount: 3.99, currency: 'EUR' })
   })
+
+  it('does not invent a cents price from three separate digit groups', () => {
+    expect(detectPrice('2 7 99', 'EUR')).toBeNull()
+  })
 })

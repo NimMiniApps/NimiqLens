@@ -17,6 +17,12 @@ export const MIN_OCR_CONFIDENCE = 60
 export interface OcrWord {
   text: string
   confidence: number
+  bbox?: {
+    x0: number
+    y0: number
+    x1: number
+    y1: number
+  }
 }
 
 export interface OcrResult {
@@ -42,13 +48,29 @@ export function maxDigitWordConfidence(words: OcrWord[]): number {
   return max
 }
 
+export function maxDigitWordArea(words: OcrWord[]): number {
+  let max = 0
+  for (const word of words) {
+    if (!/\d/.test(word.text) || !word.bbox) continue
+    const area = Math.max(0, word.bbox.x1 - word.bbox.x0) * Math.max(0, word.bbox.y1 - word.bbox.y0)
+    max = Math.max(max, area)
+  }
+  return max
+}
+
 function flattenWords(page: Page): OcrWord[] {
   const words: OcrWord[] = []
   for (const block of page.blocks ?? []) {
     for (const paragraph of block.paragraphs ?? []) {
       for (const line of paragraph.lines ?? []) {
         for (const word of line.words ?? []) {
-          words.push({ text: word.text, confidence: word.confidence })
+          words.push({
+            text: word.text,
+            confidence: word.confidence,
+            bbox: word.bbox
+              ? { x0: word.bbox.x0, y0: word.bbox.y0, x1: word.bbox.x1, y1: word.bbox.y1 }
+              : undefined,
+          })
         }
       }
     }
@@ -89,7 +111,11 @@ export async function prepareOcrWorker(): Promise<void> {
  */
 export async function recognizeText(image: HTMLCanvasElement): Promise<OcrResult> {
   const worker = await getWorker()
-  const result = await worker.recognize(image, {}, { blocks: true })
+  const input =
+    typeof document === 'undefined' && 'toBuffer' in image
+      ? (image as { toBuffer: (type: string) => Uint8Array }).toBuffer('image/png')
+      : image
+  const result = await worker.recognize(input, {}, { blocks: true })
   return {
     text: result.data.text,
     confidence: result.data.confidence,

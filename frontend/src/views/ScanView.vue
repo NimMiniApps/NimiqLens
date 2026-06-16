@@ -3,9 +3,10 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useScanStore } from '../stores/scan'
 import { usePreferencesStore } from '../stores/preferences'
-import { detectPrice, type DetectedPrice } from '../lib/priceDetection'
-import { prepareOcrWorker, recognizeText, terminateOcrWorker, maxDigitWordConfidence, MIN_OCR_CONFIDENCE } from '../lib/ocr'
-import { captureAndPreprocessTarget, captureTargetCrop, assessFrameQuality, getGrayscaleFromCanvas, TARGET_HEIGHT_RATIO, TARGET_WIDTH_RATIO } from '../lib/scanImage'
+import type { DetectedPrice } from '../lib/priceDetection'
+import { prepareOcrWorker, terminateOcrWorker } from '../lib/ocr'
+import { runOcrPipeline } from '../lib/ocrPipeline'
+import { capturePreprocessedCrops, captureTargetCrop, assessFrameQuality, getGrayscaleFromCanvas, TARGET_HEIGHT_RATIO, TARGET_WIDTH_RATIO } from '../lib/scanImage'
 import { createPriceCandidateTracker } from '../lib/priceCandidate'
 import { FIAT_CURRENCIES, type FiatCurrency } from '../lib/convert'
 import IconCamera from '../components/icons/IconCamera.vue'
@@ -168,23 +169,9 @@ async function sampleLiveFrame() {
 async function recognizePriceFromFrame(): Promise<DetectedPrice | null> {
   if (!videoRef.value || !canvasRef.value) return null
 
-  const variants = captureAndPreprocessTarget(videoRef.value, canvasRef.value)
-  let bestMatch: { price: DetectedPrice; score: number } | null = null
-
-  for (const variant of variants) {
-    const { text, confidence, words } = await recognizeText(variant)
-    const digitConfidence = maxDigitWordConfidence(words)
-    if (digitConfidence < MIN_OCR_CONFIDENCE) continue
-    const price = detectPrice(text, editCurrency.value)
-    if (!price) continue
-
-    const score = digitConfidence * 1000 + confidence
-    if (!bestMatch || score > bestMatch.score) {
-      bestMatch = { price, score }
-    }
-  }
-
-  return bestMatch?.price ?? null
+  const crops = capturePreprocessedCrops(videoRef.value, canvasRef.value)
+  const result = await runOcrPipeline(crops, editCurrency.value)
+  return result.winner?.parsed ?? null
 }
 
 async function runScanCycle() {

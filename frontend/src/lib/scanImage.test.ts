@@ -17,6 +17,9 @@ import {
   getTargetCropRect,
   getTargetCropRects,
   getVisibleFrameRect,
+  extractCropFromCanvas,
+  getCropsFromStaticImage,
+  getPreprocessedCropsFromStaticImage,
   preprocessPixels,
   preprocessTargetRegion,
 } from './scanImage'
@@ -85,6 +88,63 @@ describe('getTargetCropRect', () => {
       expect(rect.x + rect.width).toBeLessThanOrEqual(visible.x + visible.width)
       expect(rect.y + rect.height).toBeLessThanOrEqual(visible.y + visible.height)
     }
+  })
+})
+
+describe('static image crop helpers', () => {
+  let source: HTMLCanvasElement
+
+  beforeEach(() => {
+    source = document.createElement('canvas')
+    source.width = 800
+    source.height = 600
+    const ctx = source.getContext('2d')
+    ctx?.fillRect(0, 0, source.width, source.height)
+  })
+
+  it('computes crop rects for a static image size', () => {
+    const crops = getCropsFromStaticImage(source)
+
+    expect(crops).toHaveLength(TARGET_VERTICAL_OFFSETS.length)
+    expect(crops[0].rect).toEqual(getTargetCropRect(source.width, source.height))
+  })
+
+  it('extracts crops from a static canvas', () => {
+    const crops = getCropsFromStaticImage(source)
+
+    for (const { rect, crop } of crops) {
+      expect(crop.width).toBe(rect.width)
+      expect(crop.height).toBe(rect.height)
+    }
+  })
+
+  it('generates preprocessing variants without a live video element', () => {
+    const preprocessed = getPreprocessedCropsFromStaticImage(source)
+
+    expect(preprocessed).toHaveLength(TARGET_VERTICAL_OFFSETS.length)
+    for (const crop of preprocessed) {
+      expect(crop.variants.length).toBeGreaterThanOrEqual(VARIANT_MODES.length)
+      for (const variant of crop.variants) {
+        expect(variant.width).toBeLessThanOrEqual(crop.rect.width * PREPROCESS_SCALE)
+        expect(variant.height).toBeLessThanOrEqual(crop.rect.height * PREPROCESS_SCALE)
+        expect(variant.width).toBeGreaterThan(0)
+        expect(variant.height).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('adds extra focused variants for sufficiently large crops', () => {
+    const preprocessed = getPreprocessedCropsFromStaticImage(source)
+
+    expect(preprocessed[0].variants.length).toBeGreaterThan(VARIANT_MODES.length)
+  })
+
+  it('extracts an arbitrary crop rect from a canvas', () => {
+    const rect = getTargetCropRect(source.width, source.height)
+    const crop = extractCropFromCanvas(source, rect)
+
+    expect(crop.width).toBe(rect.width)
+    expect(crop.height).toBe(rect.height)
   })
 })
 

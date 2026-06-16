@@ -14,7 +14,11 @@ const createWorker = vi.fn(async () => ({
                 {
                   words: [
                     { text: '€', confidence: 70 },
-                    { text: '12.99', confidence: 95 },
+                    {
+                      text: '12.99',
+                      confidence: 95,
+                      bbox: { x0: 10, y0: 12, x1: 90, y1: 42 },
+                    },
                   ],
                 },
               ],
@@ -36,6 +40,7 @@ import {
   recognizeText,
   terminateOcrWorker,
   maxDigitWordConfidence,
+  maxDigitWordArea,
   PRICE_CHAR_WHITELIST,
 } from './ocr'
 
@@ -63,8 +68,8 @@ describe('ocr worker', () => {
       text: '€12.99',
       confidence: 90,
       words: [
-        { text: '€', confidence: 70 },
-        { text: '12.99', confidence: 95 },
+        { text: '€', confidence: 70, bbox: undefined },
+        { text: '12.99', confidence: 95, bbox: { x0: 10, y0: 12, x1: 90, y1: 42 } },
       ],
     })
   })
@@ -113,6 +118,16 @@ describe('ocr worker', () => {
 
   it('maxDigitWordConfidence returns 0 when no word contains a digit', () => {
     expect(maxDigitWordConfidence([{ text: 'KORTING', confidence: 85 }])).toBe(0)
+  })
+
+  it('maxDigitWordArea returns the largest digit-word box area', () => {
+    expect(
+      maxDigitWordArea([
+        { text: 'kg', confidence: 40 },
+        { text: '1.99', confidence: 80, bbox: { x0: 0, y0: 0, x1: 60, y1: 30 } },
+        { text: '2.06', confidence: 95, bbox: { x0: 0, y0: 0, x1: 20, y1: 12 } },
+      ]),
+    ).toBe(1800)
   })
 
   it('retries worker creation after initialization fails', async () => {

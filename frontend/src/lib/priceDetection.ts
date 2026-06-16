@@ -81,11 +81,11 @@ function parseAmount(raw: string): number {
 function normalizeLikelyMissingDecimal(text: string): string {
   return text
     .replace(/([€$£¥₹]\s*)0(\d{2})\b/g, '$10,$2')
-    .replace(/([€$£¥₹]\s*)(\d{1,3})\s+(\d{2})\b/g, '$1$2,$3')
+    .replace(/([€$£¥₹]\s*)(?<!\d\s)(\d{1,3})\s+(\d{2})\b/g, '$1$2,$3')
     .replace(new RegExp(`\\b(${CURRENCY_CODES})\\s*0(\\d{2})\\b`, 'gi'), '$1 0,$2')
-    .replace(new RegExp(`\\b(${CURRENCY_CODES})\\s+(\\d{1,3})\\s+(\\d{2})\\b`, 'gi'), '$1 $2,$3')
+    .replace(new RegExp(`\\b(${CURRENCY_CODES})\\s+(?<!\\d\\s)(\\d{1,3})\\s+(\\d{2})\\b`, 'gi'), '$1 $2,$3')
     .replace(new RegExp(`\\b0(\\d{2})\\s*(${CURRENCY_CODES})\\b`, 'gi'), '0,$1 $2')
-    .replace(new RegExp(`\\b(\\d{1,3})\\s+(\\d{2})\\s*(${CURRENCY_CODES})\\b`, 'gi'), '$1,$2 $3')
+    .replace(new RegExp(`(?<!\\d\\s)\\b(\\d{1,3})\\s+(\\d{2})\\s*(${CURRENCY_CODES})\\b`, 'gi'), '$1,$2 $3')
 }
 
 function detectWithPatterns(text: string, patterns: PricePattern[]): DetectedPrice | null {
@@ -123,7 +123,7 @@ export function detectPrice(text: string, fallbackCurrency?: FiatCurrency): Dete
       return { amount: parseAmount(bareDecimal[1]), currency: fallbackCurrency }
     }
 
-    const spacedCents = normalizedText.match(/\b(\d{1,3})\s+(\d{2})\b/)
+    const spacedCents = normalizedText.match(/(?<!\d\s)\b(\d{1,3})\s+(\d{2})\b/)
     if (spacedCents) {
       return { amount: parseAmount(`${spacedCents[1]}.${spacedCents[2]}`), currency: fallbackCurrency }
     }
