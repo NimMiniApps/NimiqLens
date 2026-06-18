@@ -6,6 +6,8 @@ import * as api from '../lib/api'
 import { readCachedWalletAddress, writeCachedWalletAddress } from '../lib/walletSession'
 
 const ADDRESS = 'NQ07 0000 0000 0000 0000 0000 0000 0000 0000'
+const TOPUP_ADDRESS = 'NQ08 1111 1111 1111 1111 1111 1111 1111 1111'
+const WALLET_ADDRESS = 'NQ09 2222 2222 2222 2222 2222 2222 2222 2222'
 
 beforeEach(() => {
   vi.useRealTimers()
@@ -142,6 +144,26 @@ describe('useWalletStore', () => {
 
     expect(store.balanceNim).toBe(1000)
     expect(api.fetchBalance).not.toHaveBeenCalled()
+  })
+
+  it('selects the listed account with the highest wallet RPC balance', async () => {
+    const call = vi.fn(async ({ params: [address] }) => ({
+      address,
+      balance: address === WALLET_ADDRESS ? 100_100_000 : 0,
+      type: 'basic',
+    }))
+    vi.spyOn(nimiq, 'initNimiq').mockResolvedValue({
+      listAccounts: vi.fn().mockResolvedValue([TOPUP_ADDRESS, WALLET_ADDRESS]),
+      getRPC: () => ({ call }),
+    } as any)
+
+    const store = useWalletStore()
+    await store.init()
+    await store.connect()
+
+    expect(store.address).toBe(WALLET_ADDRESS)
+    expect(store.balanceNim).toBe(1001)
+    expect(readCachedWalletAddress()).toBe(WALLET_ADDRESS)
   })
 
   it('connects, stores the shortened address, and loads the balance', async () => {
