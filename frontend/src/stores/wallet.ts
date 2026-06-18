@@ -22,31 +22,6 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeout))
 }
 
-async function selectAccountForBalance(
-  provider: Pick<NimiqProvider, 'getRPC'>,
-  accounts: string[],
-): Promise<{ address: string | null; balanceNim: number | null }> {
-  const firstAccount = accounts[0] ?? null
-  if (!firstAccount || !provider.getRPC?.()) return { address: firstAccount, balanceNim: null }
-
-  let selectedAddress = firstAccount
-  let selectedBalance: number | null = null
-
-  for (const account of accounts) {
-    try {
-      const balance = await fetchBalanceFromProvider(provider, account)
-      if (selectedBalance === null || balance.balance_nim > selectedBalance) {
-        selectedAddress = account
-        selectedBalance = balance.balance_nim
-      }
-    } catch {
-      // Ignore per-account read failures; connect can still fall back to the first listed address.
-    }
-  }
-
-  return { address: selectedAddress, balanceNim: selectedBalance }
-}
-
 export const useWalletStore = defineStore('wallet', {
   state: () => ({
     provider: null as NimiqProvider | null,
@@ -94,16 +69,10 @@ export const useWalletStore = defineStore('wallet', {
         const accounts = providerResult(
           await withTimeout(this.provider.listAccounts(), ACCOUNT_REQUEST_TIMEOUT_MS),
         )
-        const selected = await selectAccountForBalance(this.provider, accounts)
-        this.address = selected.address
+        this.address = accounts[0] ?? null
         if (this.address) {
           writeCachedWalletAddress(this.address)
-          if (selected.balanceNim !== null) {
-            this.balanceNim = selected.balanceNim
-            this.balanceError = null
-          } else {
-            await this.loadBalance()
-          }
+          await this.loadBalance()
         } else {
           writeCachedWalletAddress(null)
         }

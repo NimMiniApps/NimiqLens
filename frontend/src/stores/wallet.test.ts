@@ -146,7 +146,7 @@ describe('useWalletStore', () => {
     expect(api.fetchBalance).not.toHaveBeenCalled()
   })
 
-  it('selects the listed account with the highest wallet RPC balance', async () => {
+  it('keeps the provider-approved account even when another listed account has more balance', async () => {
     const call = vi.fn(async ({ params: [address] }) => ({
       address,
       balance: address === WALLET_ADDRESS ? 100_100_000 : 0,
@@ -161,9 +161,9 @@ describe('useWalletStore', () => {
     await store.init()
     await store.connect()
 
-    expect(store.address).toBe(WALLET_ADDRESS)
-    expect(store.balanceNim).toBe(1001)
-    expect(readCachedWalletAddress()).toBe(WALLET_ADDRESS)
+    expect(store.address).toBe(TOPUP_ADDRESS)
+    expect(store.balanceNim).toBe(0)
+    expect(readCachedWalletAddress()).toBe(TOPUP_ADDRESS)
   })
 
   it('connects, stores the shortened address, and loads the balance', async () => {
