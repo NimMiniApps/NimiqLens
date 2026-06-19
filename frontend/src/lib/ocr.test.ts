@@ -92,6 +92,17 @@ describe('ocr worker', () => {
     })
   })
 
+  it('loads Tesseract worker, core, and language files from same-origin app assets', async () => {
+    await prepareOcrWorker()
+
+    expect(createWorker).toHaveBeenCalledWith('eng', 1, {
+      workerPath: '/ocr/worker.min.js',
+      corePath: '/ocr/core',
+      langPath: '/ocr/lang',
+      workerBlobURL: false,
+    })
+  })
+
   it('terminates the worker when requested', async () => {
     const canvas = document.createElement('canvas')
     await recognizeText(canvas)

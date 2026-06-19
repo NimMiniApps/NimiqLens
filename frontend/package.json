@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "dev": "npm run prepare:ocr-assets && vite",
+    "prepare:ocr-assets": "node scripts/prepare-ocr-assets.mjs",
+    "build": "npm run prepare:ocr-assets && vue-tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "ocr:fixture": "tsx scripts/ocr-fixture-runner.ts"

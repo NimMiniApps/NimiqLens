@@ -80,9 +80,18 @@ function flattenWords(page: Page): OcrWord[] {
 
 let workerPromise: Promise<Worker> | null = null
 
+function ocrAssetPath(path: string): string {
+  return `${import.meta.env.BASE_URL.replace(/\/$/, '')}/ocr/${path}`
+}
+
 async function loadWorker(): Promise<Worker> {
   const { createWorker } = await import('tesseract.js')
-  const worker = await createWorker('eng')
+  const worker = await createWorker('eng', 1, {
+    workerPath: ocrAssetPath('worker.min.js'),
+    corePath: ocrAssetPath('core'),
+    langPath: ocrAssetPath('lang'),
+    workerBlobURL: false,
+  })
   await worker.setParameters({
     tessedit_char_whitelist: PRICE_CHAR_WHITELIST,
   })
