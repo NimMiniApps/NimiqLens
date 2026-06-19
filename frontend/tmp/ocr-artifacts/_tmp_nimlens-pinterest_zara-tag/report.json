@@ -1,0 +1,129 @@
+{
+  "input": "/tmp/nimlens-pinterest/zara-tag.jpg",
+  "currency": "EUR",
+  "crops": [
+    {
+      "index": 0,
+      "rect": {
+        "x": 92,
+        "y": 295,
+        "width": 552,
+        "height": 145
+      },
+      "variants": [
+        {
+          "index": 0,
+          "mode": "grayscale",
+          "text": "B L L L\nAR. 8211305401\nA B A 05887226250403\n",
+          "confidence": 35,
+          "digitConfidence": 88,
+          "parsed": null,
+          "score": null,
+          "rejected": true
+        },
+        {
+          "index": 1,
+          "mode": "threshold:128",
+          "text": "L- 2-I\nB L L L\nAR B211,305401\n5 A EN BY A D5BA7 226250403\n",
+          "confidence": 20,
+          "digitConfidence": 0,
+          "parsed": null,
+          "score": null,
+          "rejected": true
+        },
+        {
+          "index": 2,
+          "mode": "threshold:160",
+          "text": "-  U\nB .\nAR. 8211305401\nF A HH A 05887226250403\n",
+          "confidence": 25,
+          "digitConfidence": 56,
+          "parsed": null,
+          "score": null,
+          "rejected": true
+        },
+        {
+          "index": 3,
+          "mode": "threshold:auto",
+          "text": "L- -I\nH L L L\nAR. 8211305401\n2 A BE BN A 05887 226250403\n",
+          "confidence": 29,
+          "digitConfidence": 30,
+          "parsed": null,
+          "score": null,
+          "rejected": true
+        },
+        {
+          "index": 4,
+          "mode": "threshold-invert:auto",
+          "text": "L- --I\nH L L L\nAR. 8211305401\n2 A BH BS A 05887 226250403\n",
+          "confidence": 29,
+          "digitConfidence": 38,
+          "parsed": null,
+          "score": null,
+          "rejected": true
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "rect": {
+        "x": 92,
+        "y": 386,
+        "width": 552,
+        "height": 145
+      },
+      "variants": [
+        {
+          "index": 0,
+          "mode": "grayscale",
+          "text": "IIR\nJ F\n",
+          "confidence": 28,
+          "digitConfidence": 0,
+          "parsed": null,
+          "score": null,
+          "rejected": true
+        },
+        {
+          "index": 1,
+          "mode": "threshold:128",
+          "text": "AERA\nF5\n",
+          "confidence": 3,
+          "digitConfidence": 0,
+          "parsed": null,
+          "score": null,
+          "rejected": true
+        },
+        {
+          "index": 2,
+          "mode": "threshold:160",
+          "text": "LLL\nP51\n",
+          "confidence": 15,
+          "digitConfidence": 0,
+          "parsed": null,
+          "score": null,
+          "rejected": true
+        },
+        {
+          "index": 3,
+          "mode": "threshold:auto",
+          "text": "RRR\n",
+          "confidence": 2,
+          "digitConfidence": 0,
+          "parsed": null,
+          "score": null,
+          "rejected": true
+        },
+        {
+          "index": 4,
+          "mode": "threshold-invert:auto",
+          "text": "LLL\n",
+          "confidence": 29,
+          "digitConfidence": 0,
+          "parsed": null,
+          "score": null,
+          "rejected": true
+        }
+      ]
+    }
+  ],
+  "winner": null
+}

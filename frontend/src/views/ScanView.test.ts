@@ -3,8 +3,19 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ScanView from './ScanView.vue'
 import type { FrameQualityResult } from '../lib/scanImage'
+import * as priceRegions from '../lib/priceRegions'
 
 const LIVE_SAMPLE_INTERVAL_MS = 100
+
+function makeMockVariantCanvas() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 32
+  canvas.height = 24
+  const ctx = canvas.getContext('2d')
+  ctx!.fillStyle = '#fff'
+  ctx?.fillRect(0, 0, canvas.width, canvas.height)
+  return canvas
+}
 
 const mocks = vi.hoisted(() => ({
   recognizeText: vi.fn(),
@@ -13,7 +24,7 @@ const mocks = vi.hoisted(() => ({
   capturePreprocessedCrops: vi.fn(() => [
     {
       rect: { x: 0, y: 0, width: 32, height: 24 },
-      variants: [document.createElement('canvas')],
+      variants: [makeMockVariantCanvas()],
     },
   ]),
   captureTargetCrop: vi.fn(() => {
@@ -91,7 +102,7 @@ beforeEach(() => {
   mocks.capturePreprocessedCrops.mockReturnValue([
     {
       rect: { x: 0, y: 0, width: 32, height: 24 },
-      variants: [document.createElement('canvas')],
+      variants: [makeMockVariantCanvas()],
     },
   ])
   mocks.captureTargetCrop.mockImplementation(() => {
@@ -313,7 +324,7 @@ describe('ScanView', () => {
     mocks.capturePreprocessedCrops.mockReturnValue([
       {
         rect: { x: 0, y: 0, width: 32, height: 24 },
-        variants: [document.createElement('canvas'), document.createElement('canvas')],
+        variants: [makeMockVariantCanvas(), makeMockVariantCanvas()],
       },
     ])
     mocks.recognizeText
@@ -333,6 +344,77 @@ describe('ScanView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Detected: 12.99 EUR')
+  })
+
+  it('auto-confirms the highest-ranked center candidate from region OCR', async () => {
+    vi.spyOn(priceRegions, 'extractCandidateRegionsFromVariant').mockReturnValue([
+      { bbox: { x: 40, y: 8, width: 18, height: 14 }, centerX: 49, centerY: 15, area: 252 },
+      { bbox: { x: 2, y: 8, width: 12, height: 14 }, centerX: 8, centerY: 15, area: 168 },
+    ])
+
+    const wrapper = await mountWithCamera()
+    await flushPromises()
+    mocks.recognizeText.mockReset()
+    mocks.recognizeText.mockImplementation(async (target: HTMLCanvasElement) => {
+      if (target.width >= 28) {
+        return { text: '€12.99', confidence: 80, words: [{ text: '€12.99', confidence: 82 }] }
+      }
+      return { text: '€3.99', confidence: 95, words: [{ text: '€3.99', confidence: 95 }] }
+    })
+
+    await wrapper.get('[data-testid="scan-now"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Detected: 3.99 EUR')
+    vi.restoreAllMocks()
+  })
+
+  it('does not auto-confirm suspicious isolated integer OCR results', async () => {
+    vi.spyOn(priceRegions, 'extractCandidateRegionsFromVariant').mockReturnValue([
+      { bbox: { x: 8, y: 8, width: 8, height: 16 }, centerX: 12, centerY: 16, area: 128 },
+      { bbox: { x: 18, y: 6, width: 28, height: 24 }, centerX: 32, centerY: 18, area: 672 },
+      { bbox: { x: 50, y: 8, width: 14, height: 14 }, centerX: 57, centerY: 15, area: 196 },
+      { bbox: { x: 95, y: 6, width: 30, height: 24 }, centerX: 110, centerY: 18, area: 720 },
+    ])
+
+    const variantCanvas = document.createElement('canvas')
+    variantCanvas.width = 140
+    variantCanvas.height = 40
+    const ctx = variantCanvas.getContext('2d')
+    ctx!.fillStyle = '#fff'
+    ctx?.fillRect(0, 0, variantCanvas.width, variantCanvas.height)
+    mocks.capturePreprocessedCrops.mockReturnValue([
+      {
+        rect: { x: 0, y: 0, width: 140, height: 40 },
+        variants: [variantCanvas],
+      },
+    ])
+
+    const wrapper = await mountWithCamera()
+    await flushPromises()
+    mocks.recognizeText.mockReset()
+    mocks.recognizeText.mockImplementation(async (target: HTMLCanvasElement) => {
+      if (target.width >= 45 && target.width <= 70) {
+        return { text: '$299 95', confidence: 90, words: [{ text: '299', confidence: 92 }] }
+      }
+      if (target.width >= 34) {
+        return { text: '$900', confidence: 95, words: [{ text: '$900', confidence: 95 }] }
+      }
+      if (target.width <= 12) {
+        return { text: '$', confidence: 80, words: [{ text: '$', confidence: 80 }] }
+      }
+      if (target.width <= 20) {
+        return { text: '95', confidence: 88, words: [{ text: '95', confidence: 88 }] }
+      }
+      return { text: '299', confidence: 90, words: [{ text: '299', confidence: 92 }] }
+    })
+
+    await wrapper.get('[data-testid="scan-now"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Detected: 299.95')
+    expect(wrapper.text()).not.toContain('900')
+    vi.restoreAllMocks()
   })
 
   it('does not run parallel OCR jobs while one is in flight', async () => {

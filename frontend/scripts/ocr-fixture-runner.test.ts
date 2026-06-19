@@ -51,6 +51,8 @@ describe('fixture report helpers', () => {
             parsed: { amount: 3.99, currency: 'EUR' },
             score: 95080,
             rejected: false,
+            regionCount: 2,
+            candidateCount: 1,
           },
           {
             index: 1,
@@ -95,6 +97,7 @@ describe('fixture report helpers', () => {
     expect(summary).toContain('Input: fixtures/ocr/example.jpg')
     expect(summary).toContain('Winner: 3.99 EUR')
     expect(summary).toContain('Best OCR text: €3.99')
+    expect(summary).toContain('Regions OCR\'d: 2')
     expect(summary).toContain('Variants: 1 accepted, 1 rejected')
   })
 })

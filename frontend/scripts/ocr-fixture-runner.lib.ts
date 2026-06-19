@@ -75,6 +75,10 @@ export function summarizeFixtureReport(report: FixtureReport): string {
     (sum, crop) => sum + crop.variants.filter((variant) => variant.rejected).length,
     0,
   )
+  const regionCount = report.crops.reduce(
+    (sum, crop) => sum + crop.variants.reduce((variantSum, variant) => variantSum + (variant.regionCount ?? 0), 0),
+    0,
+  )
 
   const winnerText = report.winner
     ? `${report.winner.parsed.amount} ${report.winner.parsed.currency}`
@@ -88,6 +92,7 @@ export function summarizeFixtureReport(report: FixtureReport): string {
     `Currency: ${report.currency}`,
     `Winner: ${winnerText}`,
     `Best OCR text: ${winnerVariant?.text.trim() ?? 'n/a'}`,
+    `Regions OCR'd: ${regionCount}`,
     `Variants: ${accepted} accepted, ${rejected} rejected`,
   ].join('\n')
 }

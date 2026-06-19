@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { detectPrice } from './priceDetection'
+import {
+  comparePriceCandidates,
+  detectPrice,
+  markSuspiciousIsolatedIntegers,
+  reconstructPriceCandidates,
+} from './priceDetection'
 
 describe('detectPrice', () => {
   it('detects a symbol-prefixed euro price', () => {
@@ -86,6 +91,11 @@ describe('detectPrice', () => {
     expect(detectPrice('1,99 GBP', 'EUR')).toEqual({ amount: 1.99, currency: 'EUR' })
   })
 
+  it('rejects symbol prices that conflict with the selected scan currency', () => {
+    expect(detectPrice('¥8', 'EUR')).toBeNull()
+    expect(detectPrice('$2.89', 'EUR')).toBeNull()
+  })
+
   it('detects a symbol price when OCR splits the whole and decimal fragments', () => {
     expect(detectPrice('€ 3. 99')).toEqual({ amount: 3.99, currency: 'EUR' })
   })
@@ -112,5 +122,77 @@ describe('detectPrice', () => {
 
   it('does not invent a cents price from three separate digit groups', () => {
     expect(detectPrice('2 7 99', 'EUR')).toBeNull()
+  })
+})
+
+describe('reconstructPriceCandidates', () => {
+  it('reconstructs $299 and 95 into 299.95 USD', () => {
+    const candidates = reconstructPriceCandidates([
+      { text: '$', confidence: 80, digitConfidence: 80, bbox: { x: 0, y: 0, width: 8, height: 20 } },
+      { text: '299', confidence: 90, digitConfidence: 92, bbox: { x: 10, y: 0, width: 40, height: 30 } },
+      { text: '95', confidence: 85, digitConfidence: 88, bbox: { x: 55, y: 2, width: 16, height: 14 } },
+    ])
+
+    expect(candidates.some((candidate) => candidate.parsed.amount === 299.95 && candidate.parsed.currency === 'USD')).toBe(true)
+  })
+
+  it('reconstructs €3 and 99 into 3.99 EUR', () => {
+    const candidates = reconstructPriceCandidates([
+      { text: '€', confidence: 80, digitConfidence: 80, bbox: { x: 0, y: 0, width: 8, height: 20 } },
+      { text: '3', confidence: 90, digitConfidence: 92, bbox: { x: 10, y: 0, width: 20, height: 30 } },
+      { text: '99', confidence: 85, digitConfidence: 88, bbox: { x: 34, y: 2, width: 16, height: 14 } },
+    ], 'EUR')
+
+    expect(candidates.some((candidate) => candidate.parsed.amount === 3.99 && candidate.parsed.currency === 'EUR')).toBe(true)
+  })
+
+  it('reconstructs superscript cents split into two one-digit fragments', () => {
+    const candidates = reconstructPriceCandidates([
+      { text: '€', confidence: 80, digitConfidence: 80, bbox: { x: 0, y: 12, width: 8, height: 20 } },
+      { text: '3', confidence: 96, digitConfidence: 96, bbox: { x: 12, y: 10, width: 24, height: 28 } },
+      { text: '9', confidence: 84, digitConfidence: 84, bbox: { x: 64, y: 4, width: 18, height: 12 } },
+      { text: '9', confidence: 84, digitConfidence: 84, bbox: { x: 84, y: 4, width: 18, height: 12 } },
+    ], 'EUR')
+
+    const split = candidates.find((candidate) => candidate.parsed.amount === 3.99)
+    const whole = candidates.find((candidate) => candidate.parsed.amount === 3)
+
+    expect(split?.parsed.currency).toBe('EUR')
+    expect(split?.splitCents).toBe(true)
+    expect(comparePriceCandidates(
+      { ...split!, centerDistance: 5 },
+      { ...whole!, centerDistance: 5 },
+    )).toBeLessThan(0)
+  })
+
+  it('does not invent fallback-currency bare prices when a conflicting symbol is present nearby', () => {
+    const candidates = reconstructPriceCandidates([
+      { text: '$', confidence: 80, digitConfidence: 0, bbox: { x: 0, y: 0, width: 12, height: 20 } },
+      { text: '8', confidence: 90, digitConfidence: 90, bbox: { x: 80, y: 0, width: 16, height: 20 } },
+      { text: '32', confidence: 90, digitConfidence: 90, bbox: { x: 100, y: 0, width: 24, height: 20 } },
+    ], 'EUR')
+
+    expect(candidates).toEqual([])
+  })
+
+  it('marks a lone $900 candidate suspicious when split cents exist nearby', () => {
+    const candidates = markSuspiciousIsolatedIntegers(
+      reconstructPriceCandidates([
+        { text: '$', confidence: 80, digitConfidence: 80, bbox: { x: 0, y: 0, width: 8, height: 20 } },
+        { text: '299', confidence: 90, digitConfidence: 92, bbox: { x: 10, y: 0, width: 40, height: 30 } },
+        { text: '95', confidence: 85, digitConfidence: 88, bbox: { x: 55, y: 2, width: 16, height: 14 } },
+        { text: '$900', confidence: 88, digitConfidence: 90, bbox: { x: 120, y: 0, width: 50, height: 30 } },
+      ], 'USD'),
+    )
+
+    const split = candidates.find((candidate) => candidate.parsed.amount === 299.95)
+    const isolated = candidates.find((candidate) => candidate.parsed.amount === 900)
+
+    expect(split?.suspiciousIsolatedInteger).toBe(false)
+    expect(isolated?.suspiciousIsolatedInteger).toBe(true)
+    expect(comparePriceCandidates(
+      { ...split!, centerDistance: 5 },
+      { ...isolated!, centerDistance: 5 },
+    )).toBeLessThan(0)
   })
 })

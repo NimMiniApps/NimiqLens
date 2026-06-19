@@ -1,20 +1,85 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { runOcrPipeline } from './ocrPipeline'
 import type { CropRect } from './scanImage'
+import * as priceRegions from './priceRegions'
 
 const rect: CropRect = { x: 0, y: 0, width: 100, height: 50 }
 
-function makeCanvas() {
+function makeCanvas(width = 10, height = 10) {
   const canvas = document.createElement('canvas')
-  canvas.width = 10
-  canvas.height = 10
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  ctx!.fillStyle = '#fff'
+  ctx?.fillRect(0, 0, width, height)
   return canvas
 }
+
 
 const recognizeText = vi.fn()
 
 beforeEach(() => {
   recognizeText.mockReset()
+})
+
+describe('runOcrPipeline region ranking', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('prefers the center-most candidate over a larger off-center candidate', async () => {
+    const canvas = makeCanvas(100, 50)
+    vi.spyOn(priceRegions, 'extractCandidateRegionsFromVariant').mockReturnValue([
+      { bbox: { x: 85, y: 10, width: 24, height: 24 }, centerX: 97, centerY: 22, area: 576 },
+      { bbox: { x: 38, y: 12, width: 22, height: 20 }, centerX: 49, centerY: 22, area: 440 },
+    ])
+
+    recognizeText.mockImplementation(async (target: HTMLCanvasElement) => {
+      if (target.width >= 50) {
+        return { text: '€12.99', confidence: 80, words: [{ text: '€12.99', confidence: 82 }] }
+      }
+      return { text: '€3.99', confidence: 95, words: [{ text: '€3.99', confidence: 95 }] }
+    })
+
+    const result = await runOcrPipeline(
+      [{ rect, variants: [canvas] }],
+      'EUR',
+      recognizeText,
+    )
+
+    expect(result.winner?.parsed).toEqual({ amount: 3.99, currency: 'EUR' })
+  })
+
+  it('down-ranks an isolated integer when a split-cents layout exists nearby', async () => {
+    const canvas = makeCanvas(140, 40)
+    vi.spyOn(priceRegions, 'extractCandidateRegionsFromVariant').mockReturnValue([
+      { bbox: { x: 8, y: 8, width: 8, height: 16 }, centerX: 12, centerY: 16, area: 128 },
+      { bbox: { x: 18, y: 6, width: 28, height: 24 }, centerX: 32, centerY: 18, area: 672 },
+      { bbox: { x: 50, y: 8, width: 14, height: 14 }, centerX: 57, centerY: 15, area: 196 },
+      { bbox: { x: 95, y: 6, width: 30, height: 24 }, centerX: 110, centerY: 18, area: 720 },
+    ])
+
+    recognizeText.mockImplementation(async (target: HTMLCanvasElement) => {
+      if (target.width >= 34) {
+        return { text: '$900', confidence: 95, words: [{ text: '$900', confidence: 95 }] }
+      }
+      if (target.width <= 12) {
+        return { text: '$', confidence: 80, words: [{ text: '$', confidence: 80 }] }
+      }
+      if (target.width <= 20) {
+        return { text: '95', confidence: 88, words: [{ text: '95', confidence: 88 }] }
+      }
+      return { text: '299', confidence: 90, words: [{ text: '299', confidence: 92 }] }
+    })
+
+    const result = await runOcrPipeline(
+      [{ rect, variants: [canvas] }],
+      'USD',
+      recognizeText,
+    )
+
+    expect(result.winner?.parsed).toEqual({ amount: 299.95, currency: 'USD' })
+  })
 })
 
 describe('runOcrPipeline', () => {
@@ -41,7 +106,9 @@ describe('runOcrPipeline', () => {
       cropIndex: 1,
       variantIndex: 0,
       parsed: { amount: 3.99, currency: 'EUR' },
-      score: 95080,
+      score: expect.any(Number),
+      text: '€3.99',
+      centerDistance: expect.any(Number),
     })
   })
 
