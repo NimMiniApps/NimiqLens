@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { fetchRates, fetchBalance, resolveApiBase } from './api'
+import { fetchRates, fetchBalance, fetchBackendVersion, resolveApiBase } from './api'
 
 const sampleRates = {
   rates: {
@@ -53,5 +53,28 @@ describe('fetchBalance', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })))
 
     await expect(fetchBalance('NQ07')).rejects.toThrow('balance request failed: 503')
+  })
+})
+
+describe('fetchBackendVersion', () => {
+  it('returns parsed backend version metadata on success', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      service: 'nimlens-backend',
+      commit_hash: 'abc1234',
+      build_time: '2026-06-20T00:00:00Z',
+      started_at: '2026-06-20T00:01:00Z',
+      uptime_seconds: 60,
+    }), { status: 200 })))
+
+    const result = await fetchBackendVersion()
+
+    expect(result.commit_hash).toBe('abc1234')
+    expect(result.uptime_seconds).toBe(60)
+  })
+
+  it('throws when backend version is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })))
+
+    await expect(fetchBackendVersion()).rejects.toThrow('version request failed: 503')
   })
 })

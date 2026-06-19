@@ -43,9 +43,31 @@ func TestHealthHandler(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", w.Code)
 	}
 
-	expected := "{\"status\":\"ok\"}\n"
-	if w.Body.String() != expected {
-		t.Fatalf("expected body %q, got %q", expected, w.Body.String())
+	var body map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if body["status"] != "ok" || body["commit_hash"] == "" {
+		t.Fatalf("unexpected body: %v", body)
+	}
+}
+
+func TestVersionHandler(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/version", nil)
+	w := httptest.NewRecorder()
+
+	versionHandler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var body VersionResponse
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if body.Service != "nimlens-backend" || body.CommitHash == "" || body.UptimeSeconds < 0 {
+		t.Fatalf("unexpected version response: %+v", body)
 	}
 }
 

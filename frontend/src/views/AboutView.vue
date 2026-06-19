@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useWalletStore } from '../stores/wallet'
 import { usePreferencesStore } from '../stores/preferences'
 import { FIAT_CURRENCIES, type FiatCurrency } from '../lib/convert'
+import { fetchBackendVersion, resolveApiBase, type BackendVersionResponse } from '../lib/api'
+import { purgeLocalAppData } from '../lib/appData'
+import { getFrontendVersion } from '../lib/version'
 import IconHexagon from '../components/icons/IconHexagon.vue'
 import IconGift from '../components/icons/IconGift.vue'
 import IconCheck from '../components/icons/IconCheck.vue'
@@ -11,10 +14,40 @@ import IconTrash from '../components/icons/IconTrash.vue'
 
 const walletStore = useWalletStore()
 const preferencesStore = usePreferencesStore()
+const frontendVersion = getFrontendVersion()
+const backendVersion = ref<BackendVersionResponse | null>(null)
+const backendVersionError = ref<string | null>(null)
+const purging = ref(false)
 
 const fiatCurrency = computed<FiatCurrency>({
   get: () => preferencesStore.fiatCurrency,
   set: (value) => preferencesStore.setFiatCurrency(value),
+})
+
+const apiBase = computed(() => resolveApiBase() || window.location.origin)
+
+function shortCommit(commit: string): string {
+  return commit.slice(0, 8)
+}
+
+async function loadBackendVersion() {
+  backendVersionError.value = null
+  try {
+    backendVersion.value = await fetchBackendVersion()
+  } catch (e) {
+    backendVersion.value = null
+    backendVersionError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function purgeAppData() {
+  purging.value = true
+  walletStore.disconnect()
+  await purgeLocalAppData()
+}
+
+onMounted(() => {
+  void loadBackendVersion()
 })
 </script>
 
@@ -46,6 +79,10 @@ const fiatCurrency = computed<FiatCurrency>({
       your NIM balance and approximate fiat values. Account access and every NIM transaction
       require your approval through Nimiq Pay's native dialogs. NimLens never accesses your
       private keys or seed phrase.
+    </p>
+    <p class="text-nimiq-muted">
+      Nimiq Pay still controls which wallet account is active. Purging NimLens data clears this
+      mini app's local WebView state, but it does not switch accounts inside Nimiq Pay.
     </p>
 
     <h2 class="text-lg font-semibold text-nimiq-blue-light">Privacy</h2>
@@ -94,8 +131,8 @@ const fiatCurrency = computed<FiatCurrency>({
     <template v-if="walletStore.address">
       <h2 class="text-lg font-semibold text-nimiq-blue-light">Local data</h2>
       <p class="text-nimiq-muted">
-        Your wallet address is saved on this device so NimLens can show your balance without
-        asking for access again.
+        This clears the wallet address shown by NimLens. If the wrong account appears again,
+        change the selected account in Nimiq Pay and reconnect from the Home screen.
       </p>
       <button
         type="button"
@@ -106,5 +143,39 @@ const fiatCurrency = computed<FiatCurrency>({
         Forget saved wallet
       </button>
     </template>
+
+    <h2 class="text-lg font-semibold text-nimiq-blue-light">Diagnostics</h2>
+    <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 rounded-lg border border-nimiq-border bg-nimiq-card p-3 text-sm">
+      <dt class="text-nimiq-muted">Frontend</dt>
+      <dd class="font-mono">{{ shortCommit(frontendVersion.commitHash) }}</dd>
+
+      <dt class="text-nimiq-muted">Built</dt>
+      <dd class="break-all">{{ frontendVersion.buildTime }}</dd>
+
+      <dt class="text-nimiq-muted">API</dt>
+      <dd class="break-all">{{ apiBase }}</dd>
+
+      <template v-if="backendVersion">
+        <dt class="text-nimiq-muted">Backend</dt>
+        <dd class="font-mono">{{ shortCommit(backendVersion.commit_hash) }}</dd>
+
+        <dt class="text-nimiq-muted">Backend built</dt>
+        <dd class="break-all">{{ backendVersion.build_time }}</dd>
+      </template>
+      <template v-else>
+        <dt class="text-nimiq-muted">Backend</dt>
+        <dd class="text-nimiq-red-light">{{ backendVersionError ?? 'Checking...' }}</dd>
+      </template>
+    </dl>
+
+    <button
+      type="button"
+      class="min-h-[44px] flex items-center justify-center gap-2 rounded-lg bg-nimiq-card border border-nimiq-border px-4 font-medium text-nimiq-red-light transition-colors duration-200 hover:bg-nimiq-red/10 disabled:opacity-60 cursor-pointer"
+      :disabled="purging"
+      @click="purgeAppData"
+    >
+      <IconTrash class="h-4 w-4" />
+      {{ purging ? 'Purging...' : 'Purge local app data' }}
+    </button>
   </div>
 </template>

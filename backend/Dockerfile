@@ -2,7 +2,9 @@ FROM golang:1.24-alpine AS build
 WORKDIR /app
 COPY go.mod ./
 COPY *.go ./
-RUN go build -o nimlens-backend .
+ARG COMMIT_HASH="dev"
+ARG BUILD_TIME="unknown"
+RUN go build -ldflags "-X main.CommitHash=${COMMIT_HASH} -X main.BuildTime=${BUILD_TIME}" -o nimlens-backend .
 
 FROM alpine:3.20
 WORKDIR /app

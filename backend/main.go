@@ -31,11 +31,12 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", rootHandler)
 	mux.HandleFunc("GET /api/health", healthHandler)
+	mux.HandleFunc("GET /api/version", versionHandler)
 	mux.HandleFunc("GET /api/rates", ratesHandler(ratesCache))
 	mux.HandleFunc("GET /api/balance/{address}", balanceHandler(rpcClient))
 
-	log.Printf("NimLens backend listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, withCORS(allowedOrigin, mux)); err != nil {
+	log.Printf("NimLens backend listening on :%s commit=%s build_time=%s", port, CommitHash, BuildTime)
+	if err := http.ListenAndServe(":"+port, withRequestLogging(withCORS(allowedOrigin, mux))); err != nil {
 		log.Fatal(err)
 	}
 }

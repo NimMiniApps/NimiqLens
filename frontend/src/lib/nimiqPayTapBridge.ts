@@ -1,15 +1,5 @@
 const MAX_TAP_MOVEMENT = 12
-
-type VueEventInvoker = (event: Event) => void
-
-function getVueClickInvoker(element: HTMLElement): VueEventInvoker | undefined {
-  const invokerKey = Object.getOwnPropertySymbols(element)
-    .find((symbol) => symbol.description === '_vei')
-  if (!invokerKey) return undefined
-
-  const invokers = (element as unknown as Record<symbol, Record<string, VueEventInvoker>>)[invokerKey]
-  return invokers?.onClick
-}
+const SYNTHETIC_CLICK_DELAY_MS = 80
 
 function findTappableElement(target: Element): HTMLElement | null {
   const button = target.closest('button')
@@ -42,6 +32,13 @@ export function installNimiqPayTapBridge() {
 
   let startX = 0
   let startY = 0
+  let pendingSyntheticClick: ReturnType<typeof setTimeout> | null = null
+
+  function clearPendingSyntheticClick() {
+    if (!pendingSyntheticClick) return
+    clearTimeout(pendingSyntheticClick)
+    pendingSyntheticClick = null
+  }
 
   window.addEventListener('touchstart', (event) => {
     const touch = event.changedTouches[0]
@@ -49,6 +46,10 @@ export function installNimiqPayTapBridge() {
     startX = touch.clientX
     startY = touch.clientY
   }, { capture: true, passive: true })
+
+  window.addEventListener('click', () => {
+    clearPendingSyntheticClick()
+  }, { capture: true })
 
   window.addEventListener('touchend', (event) => {
     const touch = event.changedTouches[0]
@@ -61,10 +62,10 @@ export function installNimiqPayTapBridge() {
     const element = findTappableElement(event.target)
     if (!element) return
 
-    const invoker = getVueClickInvoker(element)
-    if (!invoker) return
-
-    event.preventDefault()
-    invoker(new MouseEvent('click'))
+    clearPendingSyntheticClick()
+    pendingSyntheticClick = setTimeout(() => {
+      pendingSyntheticClick = null
+      element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    }, SYNTHETIC_CLICK_DELAY_MS)
   }, { capture: true, passive: false })
 }

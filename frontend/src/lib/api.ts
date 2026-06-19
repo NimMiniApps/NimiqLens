@@ -15,6 +15,14 @@ export interface BalanceResponse {
   balance_nim: number
 }
 
+export interface BackendVersionResponse {
+  service: string
+  commit_hash: string
+  build_time: string
+  started_at: string
+  uptime_seconds: number
+}
+
 /** Backend port when deriving the API URL from the page hostname (LAN mobile dev). */
 const BACKEND_PORT = 8787
 
@@ -53,4 +61,10 @@ export async function fetchBalance(address: string): Promise<BalanceResponse> {
   const res = await fetch(`${resolveApiBase()}/api/balance/${encodeURIComponent(address)}`)
   if (!res.ok) throw new Error(`balance request failed: ${res.status}`)
   return res.json() as Promise<BalanceResponse>
+}
+
+export async function fetchBackendVersion(): Promise<BackendVersionResponse> {
+  const res = await fetch(`${resolveApiBase()}/api/version`)
+  if (!res.ok) throw new Error(`version request failed: ${res.status}`)
+  return res.json() as Promise<BackendVersionResponse>
 }
