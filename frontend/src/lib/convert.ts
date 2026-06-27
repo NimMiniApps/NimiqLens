@@ -24,7 +24,32 @@ const ZERO_DECIMAL_FIAT_CURRENCIES: ReadonlySet<FiatCurrency> = new Set(['JPY'])
 /** Formats a fiat amount with the decimal precision conventional for the currency. */
 export function formatFiatAmount(currency: FiatCurrency, amount: number): string {
   const decimals = ZERO_DECIMAL_FIAT_CURRENCIES.has(currency) ? 0 : 2
-  return amount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+  return formatDecimalAmount(amount, decimals, decimals)
+}
+
+function formatDecimalAmount(
+  amount: number,
+  minimumFractionDigits: number,
+  maximumFractionDigits: number,
+): string {
+  return amount.toLocaleString('en-US', { minimumFractionDigits, maximumFractionDigits })
+}
+
+function formatCompactAmount(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    notation: 'compact',
+    maximumFractionDigits: 2,
+  }).format(amount)
+}
+
+/** Formats a NIM amount for balances and affordability hints. */
+export function formatNimAmount(amount: number): string {
+  const decimals = amount < 1 ? 4 : 2
+  const formatted = formatDecimalAmount(amount, decimals, decimals)
+  if (amount >= 1_000_000) {
+    return `${formatted} (${formatCompactAmount(amount)})`
+  }
+  return formatted
 }
 
 /** assetAmount = fiatAmount / assetPriceInFiat */
@@ -40,26 +65,29 @@ export function convertNimBalanceToFiat(balanceNim: number, rates: FiatValues): 
 
 /** Formats an asset amount with the decimal precision defined in the design spec. */
 export function formatAssetAmount(asset: Asset, amount: number): string {
-  let decimals: number
+  const decimals = assetAmountDecimals(asset, amount)
+  const formatted = formatDecimalAmount(amount, decimals, decimals)
+  const compactSuffix = asset === 'NIM' && amount >= 1_000_000
+    ? ` (${formatCompactAmount(amount)})`
+    : ''
+  return `≈ ${formatted}${compactSuffix}`
+}
+
+function assetAmountDecimals(asset: Asset, amount: number): number {
   switch (asset) {
     case 'NIM':
-      decimals = amount < 1 ? 4 : 2
-      break
+      return amount < 1 ? 4 : 2
     case 'USDT':
-      decimals = 2
-      break
+      return 2
     case 'BTC':
-      decimals = 8
-      break
+      return 8
     case 'ETH':
-      decimals = 6
-      break
+      return 6
     default: {
       const _exhaustive: never = asset
       throw new Error(`Unsupported asset: ${_exhaustive}`)
     }
   }
-  return `≈ ${amount.toFixed(decimals)}`
 }
 
 /** Formats a fiat price for one unit of an asset (rates screen). */

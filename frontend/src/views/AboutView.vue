@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useWalletStore } from '../stores/wallet'
+import { useWalletStore, DEFAULT_TIP_AMOUNT_NIM } from '../stores/wallet'
 import { usePreferencesStore } from '../stores/preferences'
 import { FIAT_CURRENCIES, type FiatCurrency } from '../lib/convert'
 import { fetchBackendVersion, resolveApiBase, type BackendVersionResponse } from '../lib/api'
@@ -18,6 +18,9 @@ const frontendVersion = getFrontendVersion()
 const backendVersion = ref<BackendVersionResponse | null>(null)
 const backendVersionError = ref<string | null>(null)
 const purging = ref(false)
+const tipAmountNim = ref(DEFAULT_TIP_AMOUNT_NIM)
+
+const TIP_PRESETS_NIM = [100, 500, 1000] as const
 
 const fiatCurrency = computed<FiatCurrency>({
   get: () => preferencesStore.fiatCurrency,
@@ -42,6 +45,7 @@ async function loadBackendVersion() {
 
 async function purgeAppData() {
   purging.value = true
+  walletStore.cancelConnect()
   walletStore.disconnect()
   await purgeLocalAppData()
 }
@@ -108,15 +112,45 @@ onMounted(() => {
     <template v-if="walletStore.isInsideNimiqPay && walletStore.address">
       <h2 class="text-lg font-semibold text-nimiq-blue-light">Support NimLens</h2>
       <p class="text-nimiq-muted">
-        If NimLens is useful to you, you can send a small one-time tip to support development.
+        If NimLens is useful to you, you can send a one-time tip to support development.
       </p>
+      <div class="flex flex-wrap gap-2">
+        <button
+          v-for="preset in TIP_PRESETS_NIM"
+          :key="preset"
+          type="button"
+          class="min-h-[44px] rounded-lg border px-3 text-sm transition-colors duration-200 cursor-pointer"
+          :class="tipAmountNim === preset
+            ? 'border-nimiq-gold-light bg-nimiq-gold/15 text-nimiq-gold-light'
+            : 'border-nimiq-border bg-nimiq-card text-nimiq-muted hover:bg-nimiq-card-elevated'"
+          @click="tipAmountNim = preset"
+        >
+          {{ preset }} NIM
+        </button>
+      </div>
+      <label class="flex items-center justify-between gap-3 rounded-lg bg-nimiq-card border border-nimiq-border p-3">
+        <span class="text-sm text-nimiq-muted">Custom amount</span>
+        <div class="flex items-center gap-2">
+          <input
+            v-model.number="tipAmountNim"
+            type="number"
+            inputmode="decimal"
+            min="0.01"
+            step="0.01"
+            class="w-28 min-h-[44px] rounded-lg bg-nimiq-card-elevated px-3 text-right text-lg focus:outline-2 focus:outline-nimiq-blue-light"
+          />
+          <span class="text-sm text-nimiq-muted">NIM</span>
+        </div>
+      </label>
       <button
         type="button"
-        class="min-h-[44px] flex items-center justify-center gap-2 rounded-lg bg-nimiq-gold-light px-4 font-medium text-nimiq-darkerblue transition-colors duration-200 hover:brightness-110 cursor-pointer"
-        @click="walletStore.sendTip()"
+        data-testid="send-tip-button"
+        class="min-h-[44px] flex items-center justify-center gap-2 rounded-lg bg-nimiq-gold-light px-4 font-medium text-nimiq-darkerblue transition-colors duration-200 hover:brightness-110 disabled:opacity-60 cursor-pointer"
+        :disabled="walletStore.tipSending || !tipAmountNim || tipAmountNim <= 0"
+        @click="walletStore.sendTip(tipAmountNim)"
       >
         <IconGift class="h-5 w-5" />
-        Tip 1000 NIM
+        {{ walletStore.tipSending ? 'Sending tip...' : `Tip ${tipAmountNim} NIM` }}
       </button>
       <div v-if="walletStore.tipTxHash" class="flex items-center gap-2 text-sm text-nimiq-green-light">
         <IconCheck class="h-4 w-4 shrink-0" />
@@ -167,6 +201,11 @@ onMounted(() => {
         <dd class="text-nimiq-red-light">{{ backendVersionError ?? 'Checking...' }}</dd>
       </template>
     </dl>
+
+    <p class="text-sm text-nimiq-muted">
+      Purging clears cached wallet access, browser caches, and offline data, then reloads NimLens.
+      Your currency preference and onboarding progress are kept.
+    </p>
 
     <button
       type="button"

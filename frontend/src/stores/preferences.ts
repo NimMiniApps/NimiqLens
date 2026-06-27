@@ -3,6 +3,8 @@ import { FIAT_CURRENCIES, type FiatCurrency } from '../lib/convert'
 
 const STORAGE_KEY = 'nimlens_preferences'
 
+export const PREFERENCES_STORAGE_KEY = STORAGE_KEY
+
 interface StoredPreferences {
   fiatCurrency: FiatCurrency
   onboardingComplete: boolean

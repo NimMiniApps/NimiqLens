@@ -194,6 +194,33 @@ describe('useWalletStore', () => {
     expect(store.connectionError).toBe('Nimiq Pay did not respond. Try again.')
   })
 
+  it('cancels an in-flight connect without leaving the home screen stuck', async () => {
+    let resolveAccounts: ((value: string[]) => void) | undefined
+    const listAccounts = vi.fn().mockImplementation(() => new Promise<string[]>((resolve) => {
+      resolveAccounts = resolve
+    }))
+    vi.spyOn(nimiq, 'initNimiq').mockResolvedValue({ listAccounts } as any)
+
+    const store = useWalletStore()
+    store.$patch({
+      provider: { listAccounts } as any,
+      initialized: true,
+      isInsideNimiqPay: true,
+    })
+
+    const connection = store.connect()
+    await vi.waitFor(() => expect(store.accessRequested).toBe(true))
+    store.cancelConnect()
+    expect(store.connecting).toBe(false)
+    expect(store.accessRequested).toBe(false)
+
+    resolveAccounts?.([ADDRESS])
+    await connection
+
+    expect(store.address).toBeNull()
+    expect(store.connecting).toBe(false)
+  })
+
   it('loads balance through Nimiq Pay RPC when available', async () => {
     vi.spyOn(api, 'fetchBalance')
     const call = vi.fn().mockResolvedValueOnce({
@@ -305,5 +332,45 @@ describe('useWalletStore', () => {
 
     expect(store.tipTxHash).toBeNull()
     expect(store.tipError).toBe('User rejected')
+  })
+
+  it('records tipError when the user rejects via an ErrorResponse', async () => {
+    const sendBasicTransactionWithData = vi.fn().mockResolvedValue({
+      error: { type: 'PermissionDeniedError', message: { code: 4001 } },
+    })
+    vi.spyOn(nimiq, 'initNimiq').mockResolvedValue({
+      listAccounts: vi.fn().mockResolvedValue([ADDRESS]),
+      sendBasicTransactionWithData,
+    } as any)
+    vi.spyOn(api, 'fetchBalance').mockResolvedValue({ address: ADDRESS, balance_nim: 123.45 })
+
+    const store = useWalletStore()
+    await store.init()
+    await store.connect()
+    await store.sendTip()
+
+    expect(store.tipTxHash).toBeNull()
+    expect(store.tipError).toBe('Transaction cancelled.')
+  })
+
+  it('sends a custom tip amount in luna', async () => {
+    const sendBasicTransactionWithData = vi.fn().mockResolvedValue('tx-hash-456')
+    vi.spyOn(nimiq, 'initNimiq').mockResolvedValue({
+      listAccounts: vi.fn().mockResolvedValue([ADDRESS]),
+      sendBasicTransactionWithData,
+    } as any)
+    vi.spyOn(api, 'fetchBalance').mockResolvedValue({ address: ADDRESS, balance_nim: 123.45 })
+
+    const store = useWalletStore()
+    await store.init()
+    await store.connect()
+    await store.sendTip(250)
+
+    expect(sendBasicTransactionWithData).toHaveBeenCalledWith({
+      recipient: import.meta.env.VITE_TIP_ADDRESS,
+      value: 25_000_000,
+      data: 'NimLens tip',
+    })
+    expect(store.tipTxHash).toBe('tx-hash-456')
   })
 })

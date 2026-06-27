@@ -31,9 +31,20 @@ describe('AboutView', () => {
     walletStore.sendTip = vi.fn()
 
     const wrapper = mount(AboutView)
-    await wrapper.find('button').trigger('click')
+    await wrapper.get('[data-testid="send-tip-button"]').trigger('click')
 
-    expect(walletStore.sendTip).toHaveBeenCalled()
+    expect(walletStore.sendTip).toHaveBeenCalledWith(1000)
+  })
+
+  it('shows preset and custom tip controls', () => {
+    const walletStore = useWalletStore()
+    walletStore.$patch({ isInsideNimiqPay: true, address: ADDRESS })
+
+    const wrapper = mount(AboutView)
+
+    expect(wrapper.text()).toContain('100 NIM')
+    expect(wrapper.text()).toContain('Custom amount')
+    expect(wrapper.get('[data-testid="send-tip-button"]').text()).toContain('Tip 1000 NIM')
   })
 
   it('shows frontend and backend version diagnostics', async () => {
@@ -58,6 +69,7 @@ describe('AboutView', () => {
     const wrapper = mount(AboutView)
 
     expect(wrapper.text()).toContain('Purge local app data')
+    expect(wrapper.text()).toContain('Your currency preference and onboarding progress are kept.')
     expect(wrapper.text()).toContain('Nimiq Pay still controls which wallet account is active.')
   })
 })

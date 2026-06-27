@@ -19,9 +19,38 @@ export function isStandalone(): boolean {
   return standalone
 }
 
+const PERMISSION_DENIED_ERROR = 'PermissionDeniedError'
+
+function stringifyUnknown(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value instanceof Error) return value.message
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    if (typeof record.message === 'string') return record.message
+    if (typeof record.type === 'string') return record.type
+  }
+  if (value == null) return 'Unknown error'
+  return String(value)
+}
+
+export function formatProviderError(error: unknown): string {
+  if (error instanceof Error) return error.message
+
+  if (typeof error === 'object' && error !== null && 'error' in error) {
+    const response = error as ErrorResponse
+    if (response.error.type === PERMISSION_DENIED_ERROR) {
+      return 'Transaction cancelled.'
+    }
+    const message = stringifyUnknown(response.error.message)
+    return message || response.error.type || 'Transaction failed.'
+  }
+
+  return stringifyUnknown(error)
+}
+
 export function providerResult<T>(result: T | ErrorResponse): T {
   if (typeof result === 'object' && result !== null && 'error' in result) {
-    throw new Error(result.error.message)
+    throw new Error(formatProviderError(result))
   }
   return result
 }

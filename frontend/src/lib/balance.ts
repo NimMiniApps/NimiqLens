@@ -14,6 +14,10 @@ export function lunaToNim(luna: number): number {
   return luna / LUNA_PER_NIM
 }
 
+export function nimToLuna(nim: number): number {
+  return Math.round(nim * LUNA_PER_NIM)
+}
+
 /** Reads NIM balance through Nimiq Pay's RPC (matches mainnet/testnet with the wallet). */
 export async function fetchBalanceFromProvider(
   provider: BalanceRpcProvider,

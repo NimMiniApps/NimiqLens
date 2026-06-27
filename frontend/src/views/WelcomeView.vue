@@ -3,7 +3,7 @@ import { computed, onMounted } from 'vue'
 import { useWalletStore } from '../stores/wallet'
 import { useRatesStore } from '../stores/rates'
 import { usePreferencesStore } from '../stores/preferences'
-import { convertNimBalanceToFiat, formatFiatAmount } from '../lib/convert'
+import { convertNimBalanceToFiat, formatFiatAmount, formatNimAmount } from '../lib/convert'
 import IconHexagon from '../components/icons/IconHexagon.vue'
 import IconExchange from '../components/icons/IconExchange.vue'
 import IconQr from '../components/icons/IconQr.vue'
@@ -30,10 +30,7 @@ const fiatValue = computed(() => {
 
 const formattedBalance = computed(() => {
   if (walletStore.balanceNim === null) return null
-  return walletStore.balanceNim.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
+  return formatNimAmount(walletStore.balanceNim)
 })
 
 async function refreshBalance() {
@@ -52,7 +49,7 @@ async function refreshBalance() {
     </div>
 
     <div
-      v-if="walletStore.connecting"
+      v-if="walletStore.connecting && walletStore.accessRequested"
       class="rounded-2xl border border-nimiq-border bg-nimiq-card px-4 py-5 flex items-center gap-3"
     >
       <IconSpinner class="h-5 w-5 shrink-0 text-nimiq-blue-light" />

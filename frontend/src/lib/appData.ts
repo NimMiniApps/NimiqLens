@@ -1,3 +1,24 @@
+import { PREFERENCES_STORAGE_KEY } from '../stores/preferences'
+
+const PRESERVED_LOCAL_STORAGE_KEYS = new Set([PREFERENCES_STORAGE_KEY])
+
+function clearLocalStorageExceptPreserved(): void {
+  const preserved = new Map<string, string>()
+  for (const key of PRESERVED_LOCAL_STORAGE_KEYS) {
+    const value = localStorage.getItem(key)
+    if (value !== null) preserved.set(key, value)
+  }
+
+  try {
+    localStorage.clear()
+    for (const [key, value] of preserved) {
+      localStorage.setItem(key, value)
+    }
+  } catch {
+    // Storage can be unavailable in restricted WebViews.
+  }
+}
+
 async function clearCacheStorage(): Promise<void> {
   if (!('caches' in window)) return
   const keys = await caches.keys()
@@ -31,11 +52,7 @@ export async function purgeLocalAppData(reload = true): Promise<void> {
     clearIndexedDB(),
   ]
 
-  try {
-    localStorage.clear()
-  } catch {
-    // Storage can be unavailable in restricted WebViews.
-  }
+  clearLocalStorageExceptPreserved()
 
   try {
     sessionStorage.clear()

@@ -1,11 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fetchBalanceFromProvider, lunaToNim } from './balance'
+import { fetchBalanceFromProvider, lunaToNim, nimToLuna } from './balance'
 
 const ADDRESS = 'NQ07 0000 0000 0000 0000 0000 0000 0000 0000'
 
 describe('lunaToNim', () => {
   it('converts luna to NIM', () => {
     expect(lunaToNim(100_000_000)).toBe(1000)
+  })
+})
+
+describe('nimToLuna', () => {
+  it('converts NIM to luna', () => {
+    expect(nimToLuna(1000)).toBe(100_000_000)
   })
 })
 

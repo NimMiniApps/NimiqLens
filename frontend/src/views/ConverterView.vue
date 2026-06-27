@@ -4,7 +4,7 @@ import { useRatesStore } from '../stores/rates'
 import { useWalletStore } from '../stores/wallet'
 import { useScanStore } from '../stores/scan'
 import { usePreferencesStore } from '../stores/preferences'
-import { ASSETS, FIAT_CURRENCIES, computeAssetAmount, formatAssetAmount, type Asset, type FiatCurrency } from '../lib/convert'
+import { ASSETS, FIAT_CURRENCIES, computeAssetAmount, formatAssetAmount, formatNimAmount, type Asset, type FiatCurrency } from '../lib/convert'
 import { affordability } from '../lib/affordability'
 import AssetIcon from '../components/icons/AssetIcon.vue'
 import IconAlert from '../components/icons/IconAlert.vue'
@@ -50,10 +50,6 @@ const affordabilityResult = computed(() => {
   if (nimAmountNeeded.value === null) return null
   return affordability(walletStore.balanceNim, nimAmountNeeded.value)
 })
-
-function formatNim(amount: number): string {
-  return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 
 function relativeTime(iso: string): string {
   const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
@@ -122,13 +118,13 @@ function relativeTime(iso: string): string {
       </div>
       <div v-else class="flex items-center gap-2 font-medium text-nimiq-gold-light">
         <IconAlert class="h-4 w-4 shrink-0" />
-        You need ≈ {{ formatNim(affordabilityResult.deficit) }} more NIM
+        You need ≈ {{ formatNimAmount(affordabilityResult.deficit) }} more NIM
       </div>
       <p v-if="nimAmountNeeded !== null" class="mt-2 text-sm text-nimiq-muted">
-        Price requires ≈ {{ formatNim(nimAmountNeeded) }} NIM
+        Price requires ≈ {{ formatNimAmount(nimAmountNeeded) }} NIM
       </p>
       <p v-if="walletStore.balanceNim !== null" class="mt-1 text-sm text-nimiq-muted">
-        You have {{ formatNim(walletStore.balanceNim) }} NIM
+        You have {{ formatNimAmount(walletStore.balanceNim) }} NIM
       </p>
     </div>
     <div

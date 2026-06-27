@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeAssetAmount, convertNimBalanceToFiat, formatAssetAmount, formatFiatRate } from './convert'
+import { computeAssetAmount, convertNimBalanceToFiat, formatAssetAmount, formatFiatRate, formatNimAmount } from './convert'
 
 describe('computeAssetAmount', () => {
   it('divides fiat amount by the asset rate', () => {
@@ -27,6 +27,24 @@ describe('formatAssetAmount', () => {
 
   it('formats ETH with 6 decimals', () => {
     expect(formatAssetAmount('ETH', 1.23456789)).toBe('≈ 1.234568')
+  })
+
+  it('adds thousand separators and compact labels for large NIM amounts', () => {
+    expect(formatAssetAmount('NIM', 2_642_217.35)).toBe('≈ 2,642,217.35 (2.64M)')
+  })
+
+  it('adds thousand separators for large USDT amounts', () => {
+    expect(formatAssetAmount('USDT', 1234567.89)).toBe('≈ 1,234,567.89')
+  })
+})
+
+describe('formatNimAmount', () => {
+  it('formats small balances with two decimals', () => {
+    expect(formatNimAmount(100)).toBe('100.00')
+  })
+
+  it('adds thousand separators and compact labels for large balances', () => {
+    expect(formatNimAmount(2_642_217.35)).toBe('2,642,217.35 (2.64M)')
   })
 })
 

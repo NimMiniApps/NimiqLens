@@ -47,13 +47,23 @@ describe('WelcomeView', () => {
     expect(wrapper.text()).toContain('Show wallet balance')
   })
 
-  it('shows that the wallet is connecting on startup', () => {
+  it('shows that the wallet is connecting after the user requests access', () => {
     const walletStore = useWalletStore()
-    walletStore.$patch({ isInsideNimiqPay: true, connecting: true, initialized: true })
+    walletStore.$patch({ isInsideNimiqPay: true, connecting: true, accessRequested: true, initialized: true })
 
     const wrapper = mountView()
 
     expect(wrapper.text()).toContain('Connecting to your wallet')
+  })
+
+  it('does not show a connecting banner for stale in-flight requests', () => {
+    const walletStore = useWalletStore()
+    walletStore.$patch({ isInsideNimiqPay: true, connecting: true, accessRequested: false, initialized: true })
+
+    const wrapper = mountView()
+
+    expect(wrapper.text()).not.toContain('Connecting to your wallet')
+    expect(wrapper.text()).toContain('Show wallet balance')
   })
 
   it('shows provider startup before wallet access is requested', () => {

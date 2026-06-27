@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWalletStore } from '../stores/wallet'
 import { usePreferencesStore } from '../stores/preferences'
@@ -20,7 +20,12 @@ const selectedCurrency = ref<FiatCurrency>(preferencesStore.fiatCurrency)
 
 const walletConnected = computed(() => !!walletStore.address)
 
+onMounted(() => {
+  void walletStore.init()
+})
+
 function goToCurrencyStep() {
+  if (walletStore.connecting) walletStore.cancelConnect()
   step.value = 2
 }
 
@@ -29,6 +34,7 @@ function goBack() {
 }
 
 function finish() {
+  if (walletStore.connecting) walletStore.cancelConnect()
   preferencesStore.completeOnboarding(selectedCurrency.value)
   router.replace('/')
 }
@@ -75,14 +81,24 @@ function finish() {
               <IconAlert class="h-4 w-4 shrink-0" />
               {{ walletStore.connectionError }}
             </p>
-            <button
-              type="button"
-              class="min-h-[44px] rounded-lg bg-nimiq-blue-light px-4 font-medium text-nimiq-darkerblue transition-colors duration-200 hover:brightness-110 disabled:opacity-50 cursor-pointer"
-              :disabled="walletStore.connecting"
-              @click="walletStore.connect()"
-            >
-              {{ walletStore.connecting ? 'Connecting…' : 'Connect wallet' }}
-            </button>
+            <div class="flex gap-2">
+              <button
+                v-if="walletStore.connecting"
+                type="button"
+                class="min-h-[44px] rounded-lg bg-nimiq-card border border-nimiq-border px-4 font-medium transition-colors duration-200 hover:bg-nimiq-card-elevated cursor-pointer"
+                @click="walletStore.cancelConnect()"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="min-h-[44px] flex-1 rounded-lg bg-nimiq-blue-light px-4 font-medium text-nimiq-darkerblue transition-colors duration-200 hover:brightness-110 disabled:opacity-50 cursor-pointer"
+                :disabled="walletStore.connecting"
+                @click="walletStore.connect()"
+              >
+                {{ walletStore.connecting ? 'Connecting…' : 'Connect wallet' }}
+              </button>
+            </div>
           </template>
         </template>
 

@@ -7,6 +7,7 @@ import IconExchange from './components/icons/IconExchange.vue'
 import IconQr from './components/icons/IconQr.vue'
 import IconChart from './components/icons/IconChart.vue'
 import IconInfo from './components/icons/IconInfo.vue'
+import UpdateBanner from './components/UpdateBanner.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -31,6 +32,7 @@ const navItems = [
 
 <template>
   <div class="min-h-screen bg-nimiq-darkerblue text-white">
+    <UpdateBanner />
     <router-view />
     <nav
       v-if="showNav"

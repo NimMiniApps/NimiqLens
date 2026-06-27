@@ -6,6 +6,13 @@
 #   # edit the domains and image owner below, then:
 #   docker stack deploy -c docker-compose.homelab.yml nimlens
 #
+# After pushing to main, CI publishes new images to GHCR. Swarm does not auto-pull
+# :latest — force a rollout on the manager, e.g.:
+#   docker service update --with-registry-auth \
+#     --image ghcr.io/<github-username>/nimlens-frontend:<commit-sha> \
+#     --force nimiqlens_frontend
+# Pinning the commit SHA tag avoids stale :latest caches on worker nodes.
+#
 # docker-compose.homelab.yml is gitignored so your real domains stay out of
 # the public repo.
 #
