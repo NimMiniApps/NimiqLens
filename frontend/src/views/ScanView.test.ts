@@ -517,6 +517,13 @@ describe('ScanView', () => {
     expect(mocks.capturePreprocessedCrops).not.toHaveBeenCalled()
   })
 
+  it('does not load OCR until the camera starts', async () => {
+    mount(ScanView, { global: { stubs } })
+    await flushPromises()
+
+    expect(mocks.prepareOcrWorker).not.toHaveBeenCalled()
+  })
+
   it('shows an initialization error and retries OCR when the camera starts', async () => {
     mocks.prepareOcrWorker
       .mockRejectedValueOnce(new Error('worker failed'))
@@ -525,10 +532,15 @@ describe('ScanView', () => {
     const wrapper = mount(ScanView, { global: { stubs } })
     await flushPromises()
 
+    expect(wrapper.text()).not.toContain('Scanner setup needs a retry.')
+
+    await wrapper.get('[data-testid="start-camera"]').trigger('click')
+    await flushPromises()
+
     expect(wrapper.text()).toContain('Scanner setup needs a retry.')
     expect(wrapper.text()).toContain('worker failed')
 
-    await wrapper.get('[data-testid="start-camera"]').trigger('click')
+    await wrapper.get('[data-testid="retry-scanner"]').trigger('click')
     await flushPromises()
 
     expect(mocks.prepareOcrWorker).toHaveBeenCalledTimes(2)
@@ -538,7 +550,11 @@ describe('ScanView', () => {
 
   it('keeps scanner retry visible when OCR setup fails', async () => {
     mocks.prepareOcrWorker.mockRejectedValueOnce(new Error('worker failed'))
+    mockCamera()
     const wrapper = mount(ScanView, { global: { stubs } })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="start-camera"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain('Scanner setup needs a retry.')

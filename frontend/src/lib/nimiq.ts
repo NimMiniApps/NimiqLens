@@ -1,7 +1,3 @@
-import { init } from '@nimiq/mini-app-sdk'
-
-export type NimiqProvider = Awaited<ReturnType<typeof init>>
-
 interface ProviderErrorResponse {
   error: {
     type: string
@@ -9,8 +5,19 @@ interface ProviderErrorResponse {
   }
 }
 
+type InitFn = (options: { timeout: number }) => Promise<unknown>
+export type NimiqProvider = NonNullable<Awaited<ReturnType<typeof initNimiq>>>
+
 let provider: NimiqProvider | null = null
 let standalone = false
+let sdkPromise: Promise<{ init: InitFn }> | null = null
+
+function loadSdk(): Promise<{ init: InitFn }> {
+  if (!sdkPromise) {
+    sdkPromise = import('@nimiq/mini-app-sdk')
+  }
+  return sdkPromise
+}
 
 export function isStandalone(): boolean {
   return standalone
@@ -31,7 +38,8 @@ export function providerResult<T>(result: T | ProviderErrorResponse): T {
 export async function initNimiq(timeout = 750): Promise<NimiqProvider | null> {
   if (provider) return provider
   try {
-    provider = await init({ timeout })
+    const { init } = await loadSdk()
+    provider = (await init({ timeout })) as NimiqProvider
     standalone = false
     return provider
   } catch {

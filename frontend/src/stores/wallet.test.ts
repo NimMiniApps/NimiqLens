@@ -3,7 +3,11 @@ import { setActivePinia, createPinia } from 'pinia'
 import { useWalletStore, TIP_AMOUNT_LUNA } from './wallet'
 import * as nimiq from '../lib/nimiq'
 import * as api from '../lib/api'
-import { readCachedWalletAddress, writeCachedWalletAddress } from '../lib/walletSession'
+import {
+  readCachedWalletAddress,
+  readCachedWalletSnapshot,
+  writeCachedWalletSnapshot,
+} from '../lib/walletSession'
 
 const ADDRESS = 'NQ07 0000 0000 0000 0000 0000 0000 0000 0000'
 const TOPUP_ADDRESS = 'NQ08 1111 1111 1111 1111 1111 1111 1111 1111'
@@ -48,21 +52,81 @@ describe('useWalletStore', () => {
     expect(store.address).toBeNull()
   })
 
-  it('does not restore a saved wallet on init because it may be stale or the top-up account', async () => {
-    writeCachedWalletAddress(ADDRESS)
+  it('restores a cached wallet snapshot on init without requesting account access', async () => {
+    writeCachedWalletSnapshot({ address: ADDRESS, balanceNim: 99.12 })
     const listAccounts = vi.fn()
     vi.spyOn(nimiq, 'initNimiq').mockResolvedValue({ listAccounts } as any)
-    const fetchBalance = vi.spyOn(api, 'fetchBalance').mockResolvedValue({ address: ADDRESS, balance_nim: 99.12 })
 
     const store = useWalletStore()
+    expect(store.address).toBe(ADDRESS)
+    expect(store.balanceNim).toBe(99.12)
+    expect(store.sessionRestored).toBe(true)
+
     await store.init()
 
     expect(listAccounts).not.toHaveBeenCalled()
-    expect(fetchBalance).not.toHaveBeenCalled()
-    expect(store.address).toBeNull()
-    expect(store.balanceNim).toBeNull()
-    expect(store.sessionRestored).toBe(false)
-    expect(readCachedWalletAddress()).toBeNull()
+  })
+
+  it('hydrates cached wallet state before the provider finishes initializing', async () => {
+    writeCachedWalletSnapshot({ address: ADDRESS, balanceNim: 99.12 })
+    let resolveInit!: (value: unknown) => void
+    const initPromise = new Promise((resolve) => {
+      resolveInit = resolve
+    })
+    vi.spyOn(nimiq, 'initNimiq').mockReturnValue(initPromise as ReturnType<typeof nimiq.initNimiq>)
+
+    const store = useWalletStore()
+    expect(store.initialized).toBe(true)
+    expect(store.address).toBe(ADDRESS)
+    expect(store.balanceNim).toBe(99.12)
+
+    const initTask = store.init()
+    resolveInit({ listAccounts: vi.fn() })
+    await initTask
+  })
+
+  it('skips balance refresh on init when the cached snapshot is still fresh', async () => {
+    writeCachedWalletSnapshot({ address: ADDRESS, balanceNim: 99.12 })
+    const initNimiq = vi.spyOn(nimiq, 'initNimiq')
+
+    const store = useWalletStore()
+    await store.init()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(initNimiq).not.toHaveBeenCalled()
+  })
+
+  it('refreshes a restored wallet balance through RPC without requesting account access', async () => {
+    localStorage.setItem('nimlens_wallet', JSON.stringify({
+      address: ADDRESS,
+      balanceNim: 99.12,
+      updatedAt: Date.now() - 5 * 60_000,
+    }))
+    const listAccounts = vi.fn()
+    const call = vi.fn().mockResolvedValueOnce({
+      address: ADDRESS,
+      balance: 125_000_000,
+      type: 'basic',
+    })
+    vi.spyOn(nimiq, 'initNimiq').mockResolvedValue({
+      listAccounts,
+      getRPC: () => ({ call }),
+    } as any)
+
+    const store = useWalletStore()
+    await store.init()
+    await vi.waitFor(() => expect(store.balanceNim).toBe(1250))
+
+    expect(listAccounts).not.toHaveBeenCalled()
+    expect(call).toHaveBeenCalledWith({
+      jsonrpc: '2.0',
+      method: 'getAccountByAddress',
+      params: [ADDRESS],
+    })
+    expect(readCachedWalletSnapshot()).toMatchObject({
+      address: ADDRESS,
+      balanceNim: 1250,
+    })
   })
 
   it('persists the wallet address after a successful connect', async () => {
@@ -119,7 +183,9 @@ describe('useWalletStore', () => {
     } as any)
 
     const store = useWalletStore()
-    await store.init()
+    const initTask = store.init()
+    await vi.advanceTimersByTimeAsync(0)
+    await initTask
     const connection = store.connect()
     await vi.advanceTimersByTimeAsync(15_000)
     await connection
@@ -166,6 +232,10 @@ describe('useWalletStore', () => {
     expect(store.address).toBe(WALLET_ADDRESS)
     expect(store.balanceNim).toBe(1001)
     expect(readCachedWalletAddress()).toBe(WALLET_ADDRESS)
+    expect(readCachedWalletSnapshot()).toMatchObject({
+      address: WALLET_ADDRESS,
+      balanceNim: 1001,
+    })
   })
 
   it('connects, stores the shortened address, and loads the balance', async () => {

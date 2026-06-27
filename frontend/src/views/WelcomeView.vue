@@ -16,7 +16,10 @@ const ratesStore = useRatesStore()
 const preferencesStore = usePreferencesStore()
 
 onMounted(() => {
-  if (!ratesStore.rates) ratesStore.load()
+  void walletStore.init()
+  if (!ratesStore.rates || ratesStore.isStale) {
+    setTimeout(() => void ratesStore.load(), 0)
+  }
 })
 
 const fiatValue = computed(() => {
@@ -89,13 +92,13 @@ async function refreshBalance() {
             <IconRefresh v-else class="h-4 w-4" />
           </button>
         </div>
+        <p v-if="formattedBalance !== null" class="mt-1 text-4xl font-bold">{{ formattedBalance }} NIM</p>
         <p v-if="walletStore.balanceLoading" class="mt-1 text-sm opacity-80">Updating balance…</p>
-        <p v-else-if="formattedBalance !== null" class="mt-1 text-4xl font-bold">{{ formattedBalance }} NIM</p>
-        <p v-else-if="walletStore.balanceError" class="mt-1 flex items-center gap-2 text-sm text-white/90">
+        <p v-else-if="formattedBalance === null && walletStore.balanceError" class="mt-1 flex items-center gap-2 text-sm text-white/90">
           <IconAlert class="h-4 w-4 shrink-0" />
           Balance unavailable: {{ walletStore.balanceError }}
         </p>
-        <p v-else class="mt-1 font-medium">Balance unavailable</p>
+        <p v-else-if="formattedBalance === null" class="mt-1 font-medium">Balance unavailable</p>
         <p class="mt-2 text-sm opacity-80">{{ walletStore.shortAddress }}</p>
       </div>
 

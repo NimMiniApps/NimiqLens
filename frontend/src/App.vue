@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useWalletStore } from './stores/wallet'
 import { usePreferencesStore } from './stores/preferences'
 import IconHexagonOutline from './components/icons/IconHexagonOutline.vue'
 import IconExchange from './components/icons/IconExchange.vue'
@@ -11,11 +10,9 @@ import IconInfo from './components/icons/IconInfo.vue'
 
 const route = useRoute()
 const router = useRouter()
-const walletStore = useWalletStore()
 const preferencesStore = usePreferencesStore()
 
 onMounted(() => {
-  void walletStore.init()
   if (!preferencesStore.onboardingComplete && route.name !== 'onboarding') {
     router.replace('/onboarding')
   }

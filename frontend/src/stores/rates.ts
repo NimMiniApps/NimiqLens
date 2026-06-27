@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { fetchRates, type RatesResponse } from '../lib/api'
+import { fetchRates } from '../lib/api'
+import { readCachedRates, writeCachedRates } from '../lib/ratesSession'
 
 const STALE_AFTER_MS = 5 * 60_000
 const RATES_REFRESH_AFTER_MS = 45_000
@@ -14,7 +15,7 @@ function clearRefreshTimer() {
 
 export const useRatesStore = defineStore('rates', {
   state: () => ({
-    rates: null as RatesResponse | null,
+    rates: readCachedRates(),
     error: null as string | null,
     loading: false,
   }),
@@ -38,6 +39,7 @@ export const useRatesStore = defineStore('rates', {
       this.error = null
       try {
         this.rates = await fetchRates()
+        writeCachedRates(this.rates)
       } catch (e) {
         this.error = e instanceof Error ? e.message : String(e)
       } finally {

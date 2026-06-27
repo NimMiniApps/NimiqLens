@@ -1,8 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import WelcomeView from '../views/WelcomeView.vue'
 
 export const routes = [
-  { path: '/', name: 'welcome', component: WelcomeView },
+  { path: '/', name: 'welcome', component: () => import('../views/WelcomeView.vue') },
   { path: '/convert', name: 'convert', component: () => import('../views/ConverterView.vue') },
   { path: '/scan', name: 'scan', component: () => import('../views/ScanView.vue') },
   { path: '/rates', name: 'rates', component: () => import('../views/RatesView.vue') },

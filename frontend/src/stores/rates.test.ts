@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useRatesStore } from './rates'
 import * as api from '../lib/api'
+import { writeCachedRates } from '../lib/ratesSession'
 
 const sampleRates: api.RatesResponse = {
   rates: {
@@ -20,11 +21,22 @@ const EXPECTED_REFRESH_AFTER_MS = 45_000
 
 beforeEach(() => {
   vi.useRealTimers()
+  localStorage.clear()
   setActivePinia(createPinia())
   vi.restoreAllMocks()
 })
 
 describe('useRatesStore', () => {
+  it('hydrates from cached rates without fetching', () => {
+    writeCachedRates(sampleRates)
+    const fetchRates = vi.spyOn(api, 'fetchRates')
+
+    const store = useRatesStore()
+
+    expect(store.rates?.source).toBe('CoinGecko')
+    expect(fetchRates).not.toHaveBeenCalled()
+  })
+
   it('loads rates and is not stale right after loading', async () => {
     vi.spyOn(api, 'fetchRates').mockResolvedValue(sampleRates)
 
@@ -36,7 +48,18 @@ describe('useRatesStore', () => {
     expect(store.isStale).toBe(false)
   })
 
-  it('records an error and leaves rates null when the fetch fails', async () => {
+  it('records an error and keeps cached rates when the fetch fails', async () => {
+    writeCachedRates(sampleRates)
+    vi.spyOn(api, 'fetchRates').mockRejectedValue(new Error('rates request failed: 503'))
+
+    const store = useRatesStore()
+    await store.load()
+
+    expect(store.rates?.source).toBe('CoinGecko')
+    expect(store.error).toBe('rates request failed: 503')
+  })
+
+  it('records an error and leaves rates null when the fetch fails without a cache', async () => {
     vi.spyOn(api, 'fetchRates').mockRejectedValue(new Error('rates request failed: 503'))
 
     const store = useRatesStore()

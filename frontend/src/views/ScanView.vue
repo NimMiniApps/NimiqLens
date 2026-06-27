@@ -211,6 +211,11 @@ async function runScanCycle() {
 }
 
 async function scanNow() {
+  if (!ocrReady.value) {
+    const ready = await ensureOcrReady()
+    if (!ready) return
+  }
+
   stopAutoScan()
   scanning.value = true
   noPriceFound.value = false
@@ -266,13 +271,6 @@ function handleVisibilityChange() {
 }
 
 onMounted(() => {
-  void ensureOcrReady().then((ready) => {
-    if (ready) {
-      if (stream.value && !detected.value) {
-        startAutoScan()
-      }
-    }
-  })
   document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 

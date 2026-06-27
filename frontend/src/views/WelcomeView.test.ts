@@ -77,6 +77,43 @@ describe('WelcomeView', () => {
     expect(wrapper.text()).toContain('EUR 1.00')
   })
 
+  it('keeps the cached balance visible while refreshing in the background', () => {
+    const walletStore = useWalletStore()
+    walletStore.$patch({
+      initialized: true,
+      address: ADDRESS,
+      balanceNim: 100,
+      balanceLoading: true,
+      sessionRestored: true,
+    })
+    const ratesStore = useRatesStore()
+    ratesStore.$patch({ rates: RATES })
+
+    const wrapper = mountView()
+
+    expect(wrapper.text()).toContain('100.00 NIM')
+    expect(wrapper.text()).toContain('Updating balance')
+    expect(wrapper.text()).not.toContain('Balance unavailable')
+    expect(wrapper.text()).toContain('EUR 1.00')
+  })
+
+  it('does not show balance unavailable when a cached balance is on screen', () => {
+    const walletStore = useWalletStore()
+    walletStore.$patch({
+      initialized: true,
+      address: ADDRESS,
+      balanceNim: 100,
+      sessionRestored: true,
+    })
+    const ratesStore = useRatesStore()
+    ratesStore.$patch({ rates: RATES })
+
+    const wrapper = mountView()
+
+    expect(wrapper.text()).toContain('100.00 NIM')
+    expect(wrapper.text()).not.toContain('Balance unavailable')
+  })
+
   it('retries wallet connection after an account-access failure', async () => {
     const walletStore = useWalletStore()
     walletStore.$patch({
